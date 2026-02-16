@@ -14,6 +14,7 @@ from openai import OpenAI
 from text_to_sql.app_logger import get_logger
 from text_to_sql.db import execute_query, get_schema_ddl
 from text_to_sql.prompts.prompts import get_prompt
+from text_to_sql.usage_tracker import log_llm_request, log_llm_response
 
 
 load_dotenv()
@@ -34,18 +35,34 @@ def ask(question: str, verbose: bool = False) -> list[dict]:
     schema = get_schema_ddl()
 
     # Step 2: Ask the LLM to generate SQL
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    user_content = f"Schema:\n{schema}\n\nQuestion: {question}"
+
+    request_id = log_llm_request(
+        model=model,
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=user_content,
+        question=question,
+    )
+
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",
-             "content": f"Schema:\n{schema}\n\nQuestion: {question}"
-            },
+            {"role": "user", "content": user_content},
         ],
         temperature=0,
     )
     sql = response.choices[0].message.content.strip()
+
+    log_llm_response(
+        request_id=request_id,
+        model=model,
+        question=question,
+        usage=response.usage.model_dump() if response.usage else {},
+        generated_sql=sql,
+    )
 
     # Clean markdown fencing if the LLM wraps it
     if sql.startswith("```"):
