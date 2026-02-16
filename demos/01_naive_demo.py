@@ -7,7 +7,6 @@ This script demonstrates the naïve prompt-and-pray approach to Text-to-SQL
 and systematically shows where it breaks on an enterprise schema.
 """
 
-import logging
 import os
 
 import tiktoken
@@ -15,18 +14,16 @@ import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from text_to_sql.app_logger import get_logger, setup_logging
 from text_to_sql.db import execute_query, get_schema_ddl
 from text_to_sql.naive.query import ask
 from text_to_sql.prompts.prompts import get_prompt
 
 
 load_dotenv()
+setup_logging()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 DIVIDER = "=" * 70
 

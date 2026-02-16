@@ -2,7 +2,6 @@
 Database connection and query execution for Neon PostgreSQL.
 """
 
-import logging
 import os
 
 import psycopg2
@@ -12,10 +11,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from text_to_sql.app_logger import get_logger
+
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SCHEMA_DIR = Path(__file__).parent.parent.parent / "schema"
 
@@ -91,4 +92,6 @@ def init_db():
 
 
 if __name__ == "__main__":
+    from text_to_sql.app_logger import setup_logging
+    setup_logging()
     init_db()

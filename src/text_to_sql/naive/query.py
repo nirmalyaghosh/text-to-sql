@@ -6,19 +6,19 @@ The simplicity IS the point — this is what most demos show,
 and it's exactly what breaks in production.
 """
 
-import logging
 import os
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from text_to_sql.app_logger import get_logger
 from text_to_sql.db import execute_query, get_schema_ddl
 from text_to_sql.prompts.prompts import get_prompt
 
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SYSTEM_PROMPT = get_prompt("naive")
 
