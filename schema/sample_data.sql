@@ -5,6 +5,8 @@
 -- Generated columns excluded from INSERTs
 -- ============================================
 
+SET search_path TO mfg_ecommerce;
+
 -- ============================================
 -- DOMAIN 1: MANUFACTURING
 -- ============================================

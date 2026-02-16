@@ -8,6 +8,13 @@
 -- ============================================
 
 -- ============================================
+-- CREATE DEDICATED SCHEMA (avoid using public)
+-- ============================================
+
+CREATE SCHEMA IF NOT EXISTS mfg_ecommerce;
+SET search_path TO mfg_ecommerce;
+
+-- ============================================
 -- DROP ALL TABLES (CASCADE handles dependencies)
 -- ============================================
 

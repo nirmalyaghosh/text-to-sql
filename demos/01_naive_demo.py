@@ -56,7 +56,7 @@ section("SETUP: Schema Overview")
 tables = execute_query("""
     SELECT table_name
     FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    WHERE table_schema = 'mfg_ecommerce' AND table_type = 'BASE TABLE'
     ORDER BY table_name
 """)
 logger.info("Database has %d tables:", len(tables))

@@ -48,7 +48,10 @@ def get_connection():
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         raise ValueError("DATABASE_URL not set in .env")
-    return psycopg2.connect(database_url)
+    conn = psycopg2.connect(database_url)
+    with conn.cursor() as cur:
+        cur.execute("SET search_path TO mfg_ecommerce, public")
+    return conn
 
 
 def get_schema_ddl() -> str:
