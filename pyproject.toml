@@ -1,0 +1,25 @@
+[project]
+name = "text-to-sql"
+version = "0.1.0"
+description = "Text-to-SQL blog series: from naïve to agentic to advanced"
+requires-python = ">=3.11"
+dependencies = [
+    "psycopg2-binary>=2.9",
+    "python-dotenv>=1.0",
+    "openai>=1.0",
+    "anthropic>=0.40",
+    "pydantic>=2.0",
+    "tiktoken>=0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
