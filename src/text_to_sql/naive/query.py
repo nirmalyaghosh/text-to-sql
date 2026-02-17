@@ -24,10 +24,13 @@ logger = get_logger(__name__)
 SYSTEM_PROMPT = get_prompt("naive")
 
 
-def ask(question: str, verbose: bool = False) -> list[dict]:
+def ask(
+        question: str,
+        verbose: bool = False,
+        max_num_result_rows: int = 10) -> list[dict]:
     """
-    Take a natural language question, generate SQL, execute it,
-    return results.
+    Helper function used to take in as input a natural language question,
+    use LLM to generate SQL, execute it, and then return results.
 
     That's it. No validation. No safety. No guardrails.
     """
@@ -69,17 +72,20 @@ def ask(question: str, verbose: bool = False) -> list[dict]:
         sql = "\n".join(sql.split("\n")[1:-1])
 
     if verbose:
-        logger.info("Question: %s", question)
-        logger.info("Generated SQL:\n%s", sql)
+        logger.info(f"Question: {question}")
+        logger.info(f"Generated SQL:\n{sql}")
 
     # Step 3: Execute the SQL directly — no validation whatsoever
     results = execute_query(sql)
 
     if verbose:
-        logger.info("Results (%d rows):", len(results))
-        for row in results[:10]:
-            logger.info("  %s", row)
-        if len(results) > 10:
-            logger.info("  ... and %d more rows", len(results) - 10)
+        results_filtered = results[:max_num_result_rows]
+        results_to_show = "".join(f"{row}\n" for row in results_filtered)
+        results_to_show = results_to_show.strip() if results_to_show \
+            else "  (no results)"
+        logger.info(f"Results ({len(results)} rows):\n{results_to_show}")
+        if len(results) > max_num_result_rows:
+            num_remaining = len(results) - max_num_result_rows
+            logger.info(f"  ... and {num_remaining} more rows")
 
     return results

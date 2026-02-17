@@ -39,7 +39,7 @@ def demo_generate_only(label: str, question: str):
     """
     Generate SQL without executing -- for destructive query demos.
     """
-    logger.info("\n--- %s ---", label)
+    logger.info(f"\n--- {label} ---")
     schema = get_schema_ddl()
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -56,19 +56,21 @@ def demo_generate_only(label: str, question: str):
     sql = response.choices[0].message.content.strip()
     if sql.startswith("```"):
         sql = "\n".join(sql.split("\n")[1:-1])
-    logger.info("  Question: %s", question)
-    logger.info("  Generated SQL: %s", sql)
+    logger.info(f"  Question: {question}")
+    logger.info(f"  Generated SQL: {sql}")
     logger.info("  ** This would execute if we called execute_query() **")
 
 
 def demo_query(label: str, question: str):
-    """Run a query and display results."""
-    logger.info("\n--- %s ---", label)
+    """
+    Run a query and display results.
+    """
+    logger.info(label)
     try:
-        results = ask(question, verbose=True)
+        results = ask(question=question, verbose=True)
         return results
     except Exception as e:
-        logger.error("  ERROR: %s: %s", type(e).__name__, e)
+        logger.error(f"  ERROR: {type(e).__name__}: {e}")
         return None
 
 
@@ -101,15 +103,17 @@ def list_scenarios(sections: list[dict]):
     Print all scenario IDs and labels.
     """
     for sec in sections:
-        logger.info("\n[%s] %s", sec["id"], sec["title"])
+        logger.info(f"\n[{sec['id']}] {sec['title']}")
         for sc in sec["scenarios"]:
             mode_tag = " (generate only)" \
                 if sc["mode"] == "generate_only" else ""
-            logger.info("  %-5s %s%s", sc["id"], sc["label"], mode_tag)
+            logger.info(f"  {sc['id']:<5} {sc['label']}{mode_tag}")
 
 
 def load_scenarios(path: Path) -> list[dict]:
-    """Load scenario definitions from JSON."""
+    """
+    Load scenario definitions from JSON.
+    """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return data["sections"]
@@ -125,43 +129,49 @@ def run_context_window_cost(model: str = "gpt-4o-mini"):
     enc = tiktoken.encoding_for_model(model_name=model)
     schema_tokens = len(enc.encode(schema_text))
 
-    logger.info("Full schema DDL: %s characters", f"{len(schema_text):,}")
-    logger.info("Full schema DDL: %s tokens", f"{schema_tokens:,}")
+    logger.info(f"Full schema DDL: {len(schema_text):,} characters")
+    logger.info(f"Full schema DDL: {schema_tokens:,} tokens")
     logger.info("")
     logger.info("Every single query sends the ENTIRE schema as context.")
     logger.info("At GPT-4o-mini pricing ($0.15/1M input tokens):")
-    logger.info("  Per query cost (schema alone): $%.4f",
-                schema_tokens * 0.15 / 1_000_000)
-    logger.info("  100 queries/day: $%.2f/day",
-                schema_tokens * 0.15 / 1_000_000 * 100)
-    logger.info("  At scale (10,000 queries/day): $%.2f/day",
-                schema_tokens * 0.15 / 1_000_000 * 10_000)
+    per_query_cost = schema_tokens * 0.15 / 1_000_000
+    logger.info(f"  Per query cost (schema alone): ${per_query_cost:.4f}")
+    logger.info(f"  100 queries/day: ${per_query_cost * 100:.2f}/day")
+    per_10k_cost = per_query_cost * 10_000
+    logger.info(f"  At scale (10,000 queries/day): ${per_10k_cost:.2f}/day")
     logger.info("")
     logger.info("With GPT-4o ($2.50/1M input tokens):")
-    logger.info("  Per query cost (schema alone): $%.4f",
-                schema_tokens * 2.50 / 1_000_000)
-    logger.info("  100 queries/day: $%.2f/day",
-                schema_tokens * 2.50 / 1_000_000 * 100)
-    logger.info("  At scale (10,000 queries/day): $%.2f/day",
-                schema_tokens * 2.50 / 1_000_000 * 10_000)
+    pqc_schema = schema_tokens * 2.50 / 1_000_000
+    logger.info(f"  Per query cost (schema alone): ${pqc_schema:.4f}")
+    logger.info(f"  100 queries/day: ${pqc_schema * 100:.2f}/day")
+    pqc_schema_10k = pqc_schema * 10_000
+    logger.info(f"  At scale (10,000 queries/day): ${pqc_schema_10k:.2f}/day")
     logger.info("")
-    logger.info("And this is only 35 tables."
+    logger.info("And this is only 35 tables. "
                 "Enterprise systems have 200-500+ tables.")
 
 
 def run_scenario(scenario: dict):
-    """Run a single scenario based on its mode."""
+    """
+    Run a single scenario based on its mode.
+    """
     if scenario["mode"] == "execute":
-        demo_query(scenario["label"], scenario["question"])
+        demo_query(
+            label=scenario["label"],
+            question=scenario["question"])
     elif scenario["mode"] == "generate_only":
-        demo_generate_only(scenario["label"], scenario["question"])
+        demo_generate_only(
+            label=scenario["label"],
+            question=scenario["question"])
 
     if scenario.get("remarks"):
-        logger.info("  %s", scenario["remarks"])
+        logger.info(f"  {scenario['remarks']}")
 
 
 def run_setup():
-    """Show schema overview."""
+    """
+    Show schema overview.
+    """
     section("SETUP: Schema Overview")
     tables = execute_query("""
         SELECT table_name
@@ -169,16 +179,18 @@ def run_setup():
         WHERE table_schema = 'mfg_ecommerce' AND table_type = 'BASE TABLE'
         ORDER BY table_name
     """)
-    logger.info("Database has %d tables:", len(tables))
-    for t in tables:
-        logger.info("  - %s", t['table_name'])
+
+    table_names_as_lines = "\n".join(f"  - {t['table_name']}" for t in tables)
+    tables_str = f"Database has {len(tables)} tables: {table_names_as_lines}"
+    logger.info(tables_str)
 
 
 def section(title: str):
-    """Print a section header."""
-    logger.info("\n%s", DIVIDER)
-    logger.info("  %s", title)
-    logger.info("%s", DIVIDER)
+    """
+    Print a section header.
+    """
+    section_text = "\n" + DIVIDER + f"\n  {title}\n" + DIVIDER
+    logger.info(section_text)
 
 
 # ============================================
@@ -221,7 +233,7 @@ if __name__ == "__main__":
     for sec in filtered:
         section(sec["title"])
         if sec.get("preamble"):
-            logger.info("%s", sec["preamble"])
+            logger.info(f"{sec['preamble']}")
         for scenario in sec["scenarios"]:
             run_scenario(scenario)
 

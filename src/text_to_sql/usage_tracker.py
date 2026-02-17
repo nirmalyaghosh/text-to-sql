@@ -103,17 +103,24 @@ def log_llm_response(
     question: str,
     usage: dict,
     generated_sql: str,
+    trim_sql_preview: bool = False,
 ) -> None:
     """
     Log an LLM response with token usage.
     """
+    generated_sql_preview = generated_sql
+    if trim_sql_preview:
+        if len(generated_sql) > PROMPT_PREVIEW_LENGTH:
+            generated_sql_preview =\
+                generated_sql[:PROMPT_PREVIEW_LENGTH] + "..."
+
     entry = {
         "event": "llm_response",
         "request_id": request_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "question": question,
-        "generated_sql_preview": generated_sql[:PROMPT_PREVIEW_LENGTH],
+        "generated_sql_preview": generated_sql_preview,
         "usage": {
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
