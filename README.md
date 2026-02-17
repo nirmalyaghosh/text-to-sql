@@ -11,19 +11,32 @@ A progressive exploration of Text-to-SQL approaches on an enterprise-grade schem
 ## Setup
 
 ```bash
-# 1. Clone and install
+# 1. Clone
 git clone <repo-url>
 cd text-to-sql
+
+# 2. Create virtual environment and install
+
+# Option A: using uv (recommended)
+uv venv .venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate       # Windows
+uv pip install -e ".[dev]"
+
+# Option B: using pip
+python -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate       # Windows
 pip install -e ".[dev]"
 
-# 2. Configure environment
+# 3. Configure environment
 cp .env.example .env
 # Edit .env with your Neon DATABASE_URL and LLM API key
 
-# 3. Initialize database
+# 4. Initialize database
 python -c "from text_to_sql.db import init_db; init_db()"
 
-# 4. Run the naïve demo
+# 5. Run the naïve demo
 python demos/01_naive_demo.py
 ```
 
