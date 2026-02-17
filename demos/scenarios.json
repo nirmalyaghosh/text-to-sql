@@ -55,10 +55,10 @@
         },
         {
           "id": "S07",
-          "label": "Four-table join, cross-domain (E-commerce + Logistics)",
+          "label": "Three-table join with column name disambiguation (E-commerce + Logistics)",
           "question": "Show all customers who have had shipments delivered, with the delivery partner name and shipping cost",
           "mode": "execute",
-          "description": "Four tables across two domains. LLM must correctly use to_customer_id (not customer_id) on the shipments table",
+          "description": "Three tables across two domains. LLM must correctly use to_customer_id (not customer_id) on the shipments table",
           "remarks": null
         }
       ]
