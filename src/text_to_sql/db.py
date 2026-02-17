@@ -3,6 +3,7 @@ Database connection and query execution for Neon PostgreSQL.
 """
 
 import os
+import re
 
 import psycopg2
 import psycopg2.extras
@@ -55,14 +56,29 @@ def get_connection():
     return conn
 
 
-def get_schema_ddl() -> str:
+def get_schema_ddl(llm_context: bool = True) -> str:
     """
-    Helper function used to read the schema DDL file as a string
-    (for use as LLM context).
+    Helper function used to read the schema DDL file as a string.
+
+    When llm_context=True (default), returns only the CREATE TABLE
+    blocks — stripping comments, DROP statements, and operational
+    commands that waste tokens and add no structural information.
+
+    When llm_context=False, returns the full file as-is
+    (used by init_db to set up the database).
     """
     schema_file = SCHEMA_DIR / "schema_setup.sql"
     schema_sql = schema_file.read_text(encoding="utf-8")
-    return schema_sql
+
+    if not llm_context:
+        return schema_sql
+
+    blocks = re.findall(
+        r"(CREATE TABLE\b.*?\);)",
+        schema_sql,
+        re.DOTALL,
+    )
+    return "\n\n".join(blocks)
 
 
 def init_db():
@@ -74,7 +90,7 @@ def init_db():
     try:
         with conn.cursor() as cur:
             # Create schema
-            schema_sql = get_schema_ddl()
+            schema_sql = get_schema_ddl(llm_context=False)
             cur.execute(schema_sql)
 
             # Load sample data
