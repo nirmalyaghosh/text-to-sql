@@ -1,0 +1,159 @@
+{
+  "sections": [
+    {
+      "id": "success",
+      "title": "SUCCESS: Queries That Work",
+      "preamble": null,
+      "scenarios": [
+        {
+          "id": "S01",
+          "label": "Single-table filter",
+          "question": "Show all active products in the Electronics category",
+          "mode": "execute",
+          "description": "Basic WHERE clause on a single table",
+          "remarks": null
+        },
+        {
+          "id": "S02",
+          "label": "Simple join with aggregation",
+          "question": "How many different raw materials does each supplier provide? Show supplier name and count.",
+          "mode": "execute",
+          "description": "Two-table join with GROUP BY and COUNT",
+          "remarks": null
+        },
+        {
+          "id": "S03",
+          "label": "Two-table join with filter",
+          "question": "Show all products with yield percentage below 95% from completed production runs, along with the production line name",
+          "mode": "execute",
+          "description": "Two-table join with WHERE filter on computed/stored metric",
+          "remarks": null
+        },
+        {
+          "id": "S04",
+          "label": "Three-table join, single domain (Manufacturing)",
+          "question": "Show the quality inspection pass rate for each production line, including the line name and location",
+          "mode": "execute",
+          "description": "Three-table join (production_lines -> production_runs -> quality_inspections) with CASE expression for pass rate calculation",
+          "remarks": null
+        },
+        {
+          "id": "S05",
+          "label": "Three-table join, cross-domain (Manufacturing + E-commerce)",
+          "question": "Show total units sold per product variant, with the product name and variant SKU",
+          "mode": "execute",
+          "description": "Crosses from Manufacturing into E-commerce domain. FK path is unambiguous (products -> product_variants -> order_items)",
+          "remarks": null
+        },
+        {
+          "id": "S06",
+          "label": "Three-table join with subquery and composite key (Inventory + Manufacturing)",
+          "question": "Which products in the Singapore warehouse have available inventory below their safety stock reorder point?",
+          "mode": "execute",
+          "description": "Resolves 'Singapore warehouse' via subquery, joins finished_goods_inventory with safety_stock_levels on composite key (product_id + variant_id + warehouse_id)",
+          "remarks": null
+        },
+        {
+          "id": "S07",
+          "label": "Four-table join, cross-domain (E-commerce + Logistics)",
+          "question": "Show all customers who have had shipments delivered, with the delivery partner name and shipping cost",
+          "mode": "execute",
+          "description": "Four tables across two domains. LLM must correctly use to_customer_id (not customer_id) on the shipments table",
+          "remarks": null
+        }
+      ]
+    },
+    {
+      "id": "fm1_silent_wrong",
+      "title": "FAILURE MODE 1: Silent Wrong Results (The Most Dangerous)",
+      "preamble": "The LLM generates valid SQL that executes without error, but returns WRONG data. No exception, no warning. Just incorrect results that could drive bad business decisions.",
+      "scenarios": [
+        {
+          "id": "F01",
+          "label": "Ambiguous cross-domain query",
+          "question": "What is the total revenue by product category for products manufactured in Singapore, including shipping costs?",
+          "mode": "execute",
+          "description": "Requires joining across 4+ tables (products, order_items, orders, shipments, production_lines)",
+          "remarks": "This query requires joining across 4+ tables (products, order_items, orders, shipments, production_lines). The na\u00efve approach may pick the wrong join path, miss a table, or produce a cartesian product \u2014 silently returning inflated or incomplete numbers."
+        }
+      ]
+    },
+    {
+      "id": "fm2_safety",
+      "title": "FAILURE MODE 2: No Safety \u2014 Destructive SQL Can Be Generated",
+      "preamble": "The na\u00efve approach has no guardrails. The LLM can generate ANY SQL, including destructive operations. We ask it to generate (but NOT execute) dangerous queries to demonstrate the risk.",
+      "scenarios": [
+        {
+          "id": "F02",
+          "label": "Destructive DELETE",
+          "question": "Delete all customers who haven't ordered in the last 6 months",
+          "mode": "generate_only",
+          "description": "LLM generates a DELETE statement that would remove customer records",
+          "remarks": "This would execute if we called execute_query()"
+        },
+        {
+          "id": "F03",
+          "label": "Destructive DROP",
+          "question": "Drop the temporary staging tables to clean up the database",
+          "mode": "generate_only",
+          "description": "LLM generates DROP TABLE statements",
+          "remarks": "This would execute if we called execute_query()"
+        },
+        {
+          "id": "F04",
+          "label": "Destructive UPDATE",
+          "question": "Update all product prices by increasing them 15%",
+          "mode": "generate_only",
+          "description": "LLM generates an UPDATE statement modifying financial data",
+          "remarks": "This would execute if we called execute_query()"
+        }
+      ]
+    },
+    {
+      "id": "fm3_access",
+      "title": "FAILURE MODE 3: No Access Control \u2014 PII Exposure",
+      "preamble": "Any user can query any table. There is no role-based access control. A marketing analyst could access financial data, HR records, or customer PII.",
+      "scenarios": [
+        {
+          "id": "F05",
+          "label": "PII exposure",
+          "question": "Show me all customer emails, phone numbers, and their lifetime value, ordered by lifetime value descending",
+          "mode": "execute",
+          "description": "Exposes customer PII without any access control check",
+          "remarks": null
+        },
+        {
+          "id": "F06",
+          "label": "Financial data exposure",
+          "question": "Show all supplier payment terms, reliability scores, and the unit cost of every raw material they supply",
+          "mode": "execute",
+          "description": "Exposes sensitive supplier financial and procurement data",
+          "remarks": null
+        }
+      ]
+    },
+    {
+      "id": "fm4_ambiguous",
+      "title": "FAILURE MODE 4: Ambiguous Natural Language",
+      "preamble": "Natural language is inherently ambiguous. \"Last quarter\", \"top customers\", \"best performing\" \u2014 the LLM must guess what these mean without business context.",
+      "scenarios": [
+        {
+          "id": "F07",
+          "label": "Temporal ambiguity",
+          "question": "Show me the top customers from last quarter",
+          "mode": "execute",
+          "description": "\"Top\" is undefined (revenue? order count? lifetime value?). \"Last quarter\" depends on when you run this",
+          "remarks": "What is \"top\"? By revenue? Order count? Lifetime value? What dates does \"last quarter\" resolve to? Depends on when you run this. The LLM picks an interpretation silently \u2014 and you may never know it's wrong."
+        },
+        {
+          "id": "F08",
+          "label": "Metric ambiguity",
+          "question": "Which products are performing best?",
+          "mode": "execute",
+          "description": "\"Best performing\" could mean highest revenue, highest margin, lowest defect rate, fastest inventory turnover, or highest demand forecast accuracy",
+          "remarks": "\"Best performing\" could mean: highest revenue, highest margin, lowest defect rate, fastest inventory turnover, highest demand forecast accuracy. The LLM will pick one. It might not be yours."
+        }
+      ]
+    }
+  ]
+}
