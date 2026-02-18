@@ -70,11 +70,11 @@
       "scenarios": [
         {
           "id": "F01",
-          "label": "Ambiguous cross-domain query",
-          "question": "What is the total revenue by product category for products manufactured in Singapore, including shipping costs?",
+          "label": "Cross-domain query with production run fan-out",
+          "question": "Show total revenue by product category, but only for products that have been manufactured on a Singapore production line",
           "mode": "execute",
-          "description": "Requires joining across 4+ tables (products, order_items, orders, shipments, production_lines)",
-          "remarks": "This query requires joining across 4+ tables (products, order_items, orders, shipments, production_lines). The na\u00efve approach may pick the wrong join path, miss a table, or produce a cartesian product \u2014 silently returning inflated or incomplete numbers."
+          "description": "Joins products, production_runs, production_lines, and profitability_analysis. P-1001 has 2 Singapore production runs, causing a fan-out that doubles its revenue rows. Correct total: $154,050.10. Naive result: $271,049.20 (1.76x overcount).",
+          "remarks": "The LLM generates valid SQL that executes without error, but the production run fan-out silently inflates P-1001 revenue by 2x. The result looks plausible \u2014 there is no error, no warning, just wrong numbers."
         }
       ]
     },
