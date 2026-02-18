@@ -152,6 +152,14 @@
           "mode": "execute",
           "description": "\"Best performing\" could mean highest revenue, highest margin, lowest defect rate, fastest inventory turnover, or highest demand forecast accuracy",
           "remarks": "\"Best performing\" could mean: highest revenue, highest margin, lowest defect rate, fastest inventory turnover, highest demand forecast accuracy. The LLM will pick one. It might not be yours."
+        },
+        {
+          "id": "F09",
+          "label": "Metric ambiguity (best-selling)",
+          "question": "What are our best-selling products?",
+          "mode": "execute",
+          "description": "\"Best-selling\" could mean highest quantity sold or highest revenue. These give different #1 products: Power Bank (101 units) vs Laptop ($72.5K revenue). Different answers lead to different inventory and production decisions.",
+          "remarks": "The LLM silently picks one interpretation. By quantity: #1 is Portable Power Bank (101 units at ~$50). By revenue: #1 is Quantum Laptop Pro (52 units at ~$1,300). A supply chain manager reading 'best-selling' wants quantity. A finance director wants revenue."
         }
       ]
     }
