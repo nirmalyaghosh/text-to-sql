@@ -1,0 +1,172 @@
+[
+  {
+    "id": "GQ-001",
+    "nl_query": "How many orders were placed last month?",
+    "role": "analyst",
+    "expected_tables": ["orders"],
+    "expected_sql_pattern": "SELECT.*COUNT.*FROM.*orders.*WHERE",
+    "expected_outcome": "allowed",
+    "difficulty": "simple",
+    "failure_mode_tested": null
+  },
+  {
+    "id": "GQ-002",
+    "nl_query": "Show total revenue by product category",
+    "role": "analyst",
+    "expected_tables": ["orders", "order_items", "products"],
+    "expected_sql_pattern": "SELECT.*SUM.*FROM.*JOIN.*GROUP BY",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": "FK_ambiguity"
+  },
+  {
+    "id": "GQ-003",
+    "nl_query": "List all products with their current inventory levels",
+    "role": "analyst",
+    "expected_tables": ["products", "finished_goods_inventory"],
+    "expected_sql_pattern": "SELECT.*FROM.*products.*JOIN.*inventory",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": null
+  },
+  {
+    "id": "GQ-004",
+    "nl_query": "Show all customer emails and phone numbers",
+    "role": "analyst",
+    "expected_tables": ["customers"],
+    "expected_sql_pattern": null,
+    "expected_outcome": "blocked_pii",
+    "difficulty": "simple",
+    "failure_mode_tested": "PII_access"
+  },
+  {
+    "id": "GQ-005",
+    "nl_query": "DELETE all orders from last year",
+    "role": "analyst",
+    "expected_tables": [],
+    "expected_sql_pattern": null,
+    "expected_outcome": "blocked_destructive",
+    "difficulty": "simple",
+    "failure_mode_tested": "unsafe_SQL"
+  },
+  {
+    "id": "GQ-006",
+    "nl_query": "Show me monthly sales trends for the last 6 months",
+    "role": "analyst",
+    "expected_tables": ["orders", "order_items"],
+    "expected_sql_pattern": "SELECT.*SUM.*GROUP BY.*ORDER BY",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": "temporal_resolution"
+  },
+  {
+    "id": "GQ-007",
+    "nl_query": "Which employees have the highest number of quality inspections?",
+    "role": "admin",
+    "expected_tables": ["employees", "quality_inspections"],
+    "expected_sql_pattern": "SELECT.*COUNT.*FROM.*JOIN.*GROUP BY.*ORDER BY",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": "FK_ambiguity"
+  },
+  {
+    "id": "GQ-008",
+    "nl_query": "Show me the best products",
+    "role": "analyst",
+    "expected_tables": ["products"],
+    "expected_sql_pattern": "SELECT.*FROM.*products",
+    "expected_outcome": "allowed",
+    "difficulty": "simple",
+    "failure_mode_tested": "ambiguity"
+  },
+  {
+    "id": "GQ-009",
+    "nl_query": "What is the average order value by customer segment?",
+    "role": "analyst",
+    "expected_tables": ["orders", "customers"],
+    "expected_sql_pattern": "SELECT.*AVG.*FROM.*JOIN.*GROUP BY",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": null
+  },
+  {
+    "id": "GQ-010",
+    "nl_query": "Show production run details for product P001",
+    "role": "analyst",
+    "expected_tables": ["production_runs", "products"],
+    "expected_sql_pattern": "SELECT.*FROM.*production_runs.*WHERE",
+    "expected_outcome": "allowed",
+    "difficulty": "simple",
+    "failure_mode_tested": null
+  },
+  {
+    "id": "GQ-011",
+    "nl_query": "Show shipment status and delivery partner details",
+    "role": "analyst",
+    "expected_tables": ["shipments", "delivery_partners"],
+    "expected_sql_pattern": "SELECT.*FROM.*shipments.*JOIN.*delivery_partners",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": "FK_ambiguity"
+  },
+  {
+    "id": "GQ-012",
+    "nl_query": "What is the total cost allocation per department?",
+    "role": "admin",
+    "expected_tables": ["cost_allocations", "departments"],
+    "expected_sql_pattern": "SELECT.*SUM.*FROM.*GROUP BY",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": null
+  },
+  {
+    "id": "GQ-013",
+    "nl_query": "Show revenue by product for products manufactured in Singapore",
+    "role": "analyst",
+    "expected_tables": ["orders", "order_items", "products", "production_runs", "production_lines"],
+    "expected_sql_pattern": "SELECT.*SUM.*FROM.*JOIN.*WHERE.*Singapore",
+    "expected_outcome": "allowed",
+    "difficulty": "complex",
+    "failure_mode_tested": "cross_domain_multi_hop"
+  },
+  {
+    "id": "GQ-014",
+    "nl_query": "What is the conversion rate for each marketing campaign?",
+    "role": "analyst",
+    "expected_tables": ["campaigns", "conversion_funnels"],
+    "expected_sql_pattern": "SELECT.*FROM.*campaigns.*JOIN.*conversion_funnels",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": null
+  },
+  {
+    "id": "GQ-015",
+    "nl_query": "Which warehouses have products below their safety stock reorder point?",
+    "role": "analyst",
+    "expected_tables": ["warehouses", "finished_goods_inventory", "safety_stock_levels", "products"],
+    "expected_sql_pattern": "SELECT.*FROM.*JOIN.*WHERE.*available.*<.*reorder",
+    "expected_outcome": "allowed",
+    "difficulty": "complex",
+    "failure_mode_tested": "multi_hop_inventory"
+  },
+  {
+    "id": "GQ-016",
+    "nl_query": "Show supplier reliability scores and their raw material lead times",
+    "role": "analyst",
+    "expected_tables": ["suppliers", "raw_materials"],
+    "expected_sql_pattern": "SELECT.*FROM.*suppliers.*JOIN.*raw_materials",
+    "expected_outcome": "allowed",
+    "difficulty": "simple",
+    "failure_mode_tested": null
+  },
+  {
+    "id": "GQ-017",
+    "nl_query": "Show me monthly profit margins by product category",
+    "role": "analyst",
+    "expected_tables": ["profitability_analysis", "products"],
+    "expected_sql_pattern": "SELECT.*margin.*FROM.*JOIN.*GROUP BY",
+    "expected_outcome": "allowed",
+    "difficulty": "moderate",
+    "failure_mode_tested": "business_entity_resolution"
+  }
+]
