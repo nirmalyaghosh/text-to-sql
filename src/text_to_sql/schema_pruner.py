@@ -409,7 +409,11 @@ class SchemaPruner:
                 blocks.append(self._table_ddl[table])
         return "\n\n".join(blocks)
 
-    def resolve_tables(self, query: str) -> Set[str]:
+    def resolve_tables(
+        self,
+        query: str,
+        max_layers: int = 3,
+    ) -> Set[str]:
         """
         Deterministic entity resolution from a NL query.
 
@@ -421,6 +425,8 @@ class SchemaPruner:
 
         Args:
             query: Natural language query
+            max_layers: Number of resolution layers to
+                apply (1-3). Default 3 (all layers).
 
         Returns:
             Set of seed table names for BFS
@@ -441,22 +447,24 @@ class SchemaPruner:
                 resolved_words.add(singular)
 
         # Layer 2: Business entity mapping
-        for term, tables in ENTITY_MAP.items():
-            if term in query_words:
-                seeds.update(tables)
-                resolved_words.add(term)
+        if max_layers >= 2:
+            for term, tables in ENTITY_MAP.items():
+                if term in query_words:
+                    seeds.update(tables)
+                    resolved_words.add(term)
 
         # Layer 3: Column name matching
         # Skip words already resolved by layers 1-2 to avoid
         # double-counting (e.g. "revenue" as both business
         # entity and column name).
-        for col_name, tables in self._column_index.items():
-            if len(col_name) < 6:
-                continue
-            if col_name in resolved_words:
-                continue
-            if col_name in query_lower:
-                seeds.update(tables)
+        if max_layers >= 3:
+            for col_name, tables in self._column_index.items():
+                if len(col_name) < 6:
+                    continue
+                if col_name in resolved_words:
+                    continue
+                if col_name in query_lower:
+                    seeds.update(tables)
 
         if not seeds:
             logger.warning(
