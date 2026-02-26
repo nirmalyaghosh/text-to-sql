@@ -13,7 +13,10 @@ Only external dependency: tiktoken.
 import dataclasses
 import re
 
-from collections import defaultdict
+from collections import (
+    defaultdict,
+    deque,
+)
 from pathlib import Path
 from typing import (
     Dict,
@@ -28,6 +31,25 @@ from text_to_sql.app_logger import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def _singularize(name: str) -> str:
+    """
+    Helper function used to strip common plural suffix from a table name.
+
+    Handles -ies (categories -> category) and
+    regular -s (orders -> order). Preserves words
+    already singular ending in -sis, -us, -ss
+    (analysis, status).
+    """
+    if name.endswith("ies"):
+        return name[:-3] + "y"
+    if name.endswith("s") and not name.endswith(
+        ("ss", "us", "is")
+    ):
+        return name[:-1]
+    return name
+
 
 SCHEMA_DIR = Path(__file__).parent.parent.parent / "schema"
 
@@ -273,13 +295,13 @@ class SchemaPruner:
             return set()
 
         visited: Set[str] = set()
-        queue: List[Tuple[str, int]] = [
+        queue: deque[Tuple[str, int]] = deque(
             (t, 0) for t in seed_tables
             if t in self._all_tables
-        ]
+        )
 
         while queue:
-            table, depth = queue.pop(0)
+            table, depth = queue.popleft()
             if table in visited:
                 continue
             visited.add(table)
@@ -387,7 +409,11 @@ class SchemaPruner:
                 blocks.append(self._table_ddl[table])
         return "\n\n".join(blocks)
 
-    def resolve_tables(self, query: str) -> Set[str]:
+    def resolve_tables(
+        self,
+        query: str,
+        max_layers: int = 3,
+    ) -> Set[str]:
         """
         Deterministic entity resolution from a NL query.
 
@@ -399,6 +425,8 @@ class SchemaPruner:
 
         Args:
             query: Natural language query
+            max_layers: Number of resolution layers to
+                apply (1-3). Default 3 (all layers).
 
         Returns:
             Set of seed table names for BFS
@@ -410,7 +438,7 @@ class SchemaPruner:
 
         # Layer 1: Direct table name matching
         for table in self._all_tables:
-            singular = table.rstrip("s")
+            singular = _singularize(name=table)
             if table in query_lower:
                 seeds.add(table)
                 resolved_words.add(table)
@@ -419,22 +447,24 @@ class SchemaPruner:
                 resolved_words.add(singular)
 
         # Layer 2: Business entity mapping
-        for term, tables in ENTITY_MAP.items():
-            if term in query_words:
-                seeds.update(tables)
-                resolved_words.add(term)
+        if max_layers >= 2:
+            for term, tables in ENTITY_MAP.items():
+                if term in query_words:
+                    seeds.update(tables)
+                    resolved_words.add(term)
 
         # Layer 3: Column name matching
         # Skip words already resolved by layers 1-2 to avoid
         # double-counting (e.g. "revenue" as both business
         # entity and column name).
-        for col_name, tables in self._column_index.items():
-            if len(col_name) < 6:
-                continue
-            if col_name in resolved_words:
-                continue
-            if col_name in query_lower:
-                seeds.update(tables)
+        if max_layers >= 3:
+            for col_name, tables in self._column_index.items():
+                if len(col_name) < 6:
+                    continue
+                if col_name in resolved_words:
+                    continue
+                if col_name in query_lower:
+                    seeds.update(tables)
 
         if not seeds:
             logger.warning(
