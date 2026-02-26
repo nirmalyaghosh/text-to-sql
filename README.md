@@ -110,3 +110,4 @@ print(result.reduction_pct)     # 97.0
 print(f"{result.full_schema_tokens} -> {result.pruned_schema_tokens} tokens")
 ```
 
+Link to [blog post](https://www.nirmalya.net/posts/2026/02/text-to-sql-schema-pruning/).
