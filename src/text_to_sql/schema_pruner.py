@@ -13,7 +13,10 @@ Only external dependency: tiktoken.
 import dataclasses
 import re
 
-from collections import defaultdict
+from collections import (
+    defaultdict,
+    deque,
+)
 from pathlib import Path
 from typing import (
     Dict,
@@ -273,13 +276,13 @@ class SchemaPruner:
             return set()
 
         visited: Set[str] = set()
-        queue: List[Tuple[str, int]] = [
+        queue: deque[Tuple[str, int]] = deque(
             (t, 0) for t in seed_tables
             if t in self._all_tables
-        ]
+        )
 
         while queue:
-            table, depth = queue.pop(0)
+            table, depth = queue.popleft()
             if table in visited:
                 continue
             visited.add(table)
