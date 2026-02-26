@@ -32,6 +32,25 @@ from text_to_sql.app_logger import get_logger
 
 logger = get_logger(__name__)
 
+
+def _singularize(name: str) -> str:
+    """
+    Helper function used to strip common plural suffix from a table name.
+
+    Handles -ies (categories -> category) and
+    regular -s (orders -> order). Preserves words
+    already singular ending in -sis, -us, -ss
+    (analysis, status).
+    """
+    if name.endswith("ies"):
+        return name[:-3] + "y"
+    if name.endswith("s") and not name.endswith(
+        ("ss", "us", "is")
+    ):
+        return name[:-1]
+    return name
+
+
 SCHEMA_DIR = Path(__file__).parent.parent.parent / "schema"
 
 # Business terms that map to specific tables.
@@ -413,7 +432,7 @@ class SchemaPruner:
 
         # Layer 1: Direct table name matching
         for table in self._all_tables:
-            singular = table.rstrip("s")
+            singular = _singularize(name=table)
             if table in query_lower:
                 seeds.add(table)
                 resolved_words.add(table)
