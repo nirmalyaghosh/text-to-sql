@@ -101,6 +101,9 @@ uv run python demos/05_schema_pruning_benchmark.py --query GQ-002
 # Ablation study (contribution of each resolver layer)
 uv run python demos/05_schema_pruning_ablation_study.py
 uv run python demos/05_schema_pruning_ablation_study.py --verbose
+
+# Approach comparison chart (pruner vs DAIL-SQL, RESDSQL, DIN-SQL, C3SQL)
+uv run python demos/05_schema_pruning_approach_comparison.py
 ```
 
 No database connection or API keys needed - the pruner works entirely from DDL text.
