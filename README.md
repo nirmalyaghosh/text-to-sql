@@ -99,8 +99,8 @@ uv run python demos/05_schema_pruning_benchmark.py --verbose
 uv run python demos/05_schema_pruning_benchmark.py --query GQ-002
 
 # Ablation study (contribution of each resolver layer)
-uv run python demos/06_ablation_study.py
-uv run python demos/06_ablation_study.py --verbose
+uv run python demos/05_schema_pruning_ablation_study.py
+uv run python demos/05_schema_pruning_ablation_study.py --verbose
 ```
 
 No database connection or API keys needed - the pruner works entirely from DDL text.

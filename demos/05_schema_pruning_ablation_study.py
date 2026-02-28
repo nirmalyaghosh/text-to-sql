@@ -2,8 +2,8 @@
 Demo: Ablation study for the 3-layer entity resolver.
 
 Usage:
-    python -m demos.06_ablation_study
-    python -m demos.06_ablation_study --verbose
+    python demos/05_schema_pruning_ablation_study.py
+    python demos/05_schema_pruning_ablation_study.py --verbose
 
 Measures each resolver layer's contribution to
 precision and recall by running all prunable golden
