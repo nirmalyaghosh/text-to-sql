@@ -168,16 +168,16 @@ def compare_results(
                       different content
       DIFF_STRATEGY   Both executed, different row counts
                       (LLM chose a different approach)
-      PRUNED_BETTER   Only pruned-schema succeeded
-      FULL_BETTER     Only full-schema succeeded
+      ONLY_PRUNED_EXECUTED   Only pruned-schema succeeded
+      ONLY_FULL_EXECUTED     Only full-schema succeeded
       BOTH_FAIL       Neither executed successfully
     """
     if not full_result["success"] and not pruned_result["success"]:
         return "BOTH_FAIL"
     if full_result["success"] and not pruned_result["success"]:
-        return "FULL_BETTER"
+        return "ONLY_FULL_EXECUTED"
     if not full_result["success"] and pruned_result["success"]:
-        return "PRUNED_BETTER"
+        return "ONLY_PRUNED_EXECUTED"
 
     # Both succeeded — compare row counts and content
     if full_result["row_count"] != pruned_result["row_count"]:
@@ -265,8 +265,8 @@ def run_e2e_validation(
         "BOTH_EXACT": 0,
         "SAME_ROW_COUNT": 0,
         "DIFF_STRATEGY": 0,
-        "PRUNED_BETTER": 0,
-        "FULL_BETTER": 0,
+        "ONLY_PRUNED_EXECUTED": 0,
+        "ONLY_FULL_EXECUTED": 0,
         "BOTH_FAIL": 0,
     }
     full_successes = 0
@@ -443,7 +443,7 @@ def run_e2e_validation(
 
     # Summary
     n = len(prunable)
-    no_regressions = counts["FULL_BETTER"] == 0
+    no_regressions = counts["ONLY_FULL_EXECUTED"] == 0
 
     logger.info("")
     logger.info("  Summary")
@@ -506,27 +506,27 @@ def run_e2e_validation(
     logger.info("")
     logger.info("  Outcome breakdown:")
     logger.info(
-        f"    BOTH_EXACT:      {counts['BOTH_EXACT']:>2}  "
+        f"    BOTH_EXACT:           {counts['BOTH_EXACT']:>2}  "
         f"(identical SQL results)"
     )
     logger.info(
-        f"    SAME_ROW_COUNT:  {counts['SAME_ROW_COUNT']:>2}  "
+        f"    SAME_ROW_COUNT:       {counts['SAME_ROW_COUNT']:>2}  "
         f"(same row count, different content)"
     )
     logger.info(
-        f"    DIFF_STRATEGY:   {counts['DIFF_STRATEGY']:>2}  "
+        f"    DIFF_STRATEGY:        {counts['DIFF_STRATEGY']:>2}  "
         f"(both succeeded, LLM chose different approach)"
     )
     logger.info(
-        f"    PRUNED_BETTER:   {counts['PRUNED_BETTER']:>2}  "
+        f"    ONLY_PRUNED_EXECUTED: {counts['ONLY_PRUNED_EXECUTED']:>2}  "
         f"(pruned succeeded, full failed)"
     )
     logger.info(
-        f"    FULL_BETTER:     {counts['FULL_BETTER']:>2}  "
+        f"    ONLY_FULL_EXECUTED:   {counts['ONLY_FULL_EXECUTED']:>2}  "
         f"(full succeeded, pruned failed)"
     )
     logger.info(
-        f"    BOTH_FAIL:       {counts['BOTH_FAIL']:>2}  "
+        f"    BOTH_FAIL:            {counts['BOTH_FAIL']:>2}  "
         f"(neither succeeded)"
     )
 
@@ -539,11 +539,11 @@ def run_e2e_validation(
         )
     else:
         logger.info(
-            f"  Regressions (FULL_BETTER): "
-            f"{counts['FULL_BETTER']}/{n}"
+            f"  Regressions (ONLY_FULL_EXECUTED): "
+            f"{counts['ONLY_FULL_EXECUTED']}/{n}"
         )
         for d in details:
-            if d["outcome"] == "FULL_BETTER":
+            if d["outcome"] == "ONLY_FULL_EXECUTED":
                 logger.info(
                     f"    {d['id']}  {d['query']}"
                 )
