@@ -101,9 +101,22 @@ uv run python demos/05_schema_pruning_benchmark.py --query GQ-002
 # Ablation study (contribution of each resolver layer)
 uv run python demos/05_schema_pruning_ablation_study.py
 uv run python demos/05_schema_pruning_ablation_study.py --verbose
+
+# Approach comparison chart (pruner vs DAIL-SQL, RESDSQL, DIN-SQL, C3SQL)
+uv run python demos/05_schema_pruning_approach_comparison.py
 ```
 
 No database connection or API keys needed - the pruner works entirely from DDL text.
+
+### End-to-end validation
+
+Compares full-schema vs pruned-schema SQL generation: for each golden query, generates SQL via the LLM with both the full and pruned schemas, executes both against the database, and classifies the outcome. Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
+
+```bash
+uv run python demos/05_schema_pruning_e2e_validation.py
+uv run python demos/05_schema_pruning_e2e_validation.py --verbose
+uv run python demos/05_schema_pruning_e2e_validation.py --query GQ-002
+```
 
 ```python
 from text_to_sql.schema_pruner import prune_for_query
