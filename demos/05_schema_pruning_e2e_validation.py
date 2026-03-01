@@ -22,6 +22,7 @@ import argparse
 import json
 import logging
 import os
+import random
 import re
 import statistics
 import time
@@ -284,26 +285,49 @@ def run_e2e_validation(
         query_id = gq["id"]
         expected_pattern = gq.get("expected_sql_pattern")
 
-        # Generate SQL with full schema
-        t0 = time.monotonic()
-        full_sql, full_usage = generate_sql(
-            question=query,
-            schema=full_schema,
-            client=client,
-            model=model,
-        )
-        full_latency = time.monotonic() - t0
-
-        # Generate SQL with pruned schema
+        # Prune schema (needed regardless of call order)
         prune_result = pruner.prune(query, max_depth=0)
-        t0 = time.monotonic()
-        pruned_sql, pruned_usage = generate_sql(
-            question=query,
-            schema=prune_result.pruned_schema,
-            client=client,
-            model=model,
-        )
-        pruned_latency = time.monotonic() - t0
+
+        # Randomise call order to avoid systematic
+        # first-call latency bias (TCP/TLS warmup)
+        full_first = random.random() < 0.5
+
+        if full_first:
+            t0 = time.monotonic()
+            full_sql, full_usage = generate_sql(
+                question=query,
+                schema=full_schema,
+                client=client,
+                model=model,
+            )
+            full_latency = time.monotonic() - t0
+
+            t0 = time.monotonic()
+            pruned_sql, pruned_usage = generate_sql(
+                question=query,
+                schema=prune_result.pruned_schema,
+                client=client,
+                model=model,
+            )
+            pruned_latency = time.monotonic() - t0
+        else:
+            t0 = time.monotonic()
+            pruned_sql, pruned_usage = generate_sql(
+                question=query,
+                schema=prune_result.pruned_schema,
+                client=client,
+                model=model,
+            )
+            pruned_latency = time.monotonic() - t0
+
+            t0 = time.monotonic()
+            full_sql, full_usage = generate_sql(
+                question=query,
+                schema=full_schema,
+                client=client,
+                model=model,
+            )
+            full_latency = time.monotonic() - t0
 
         total_full_prompt_tokens += full_usage.get(
             "prompt_tokens", 0
