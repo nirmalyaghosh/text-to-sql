@@ -273,6 +273,7 @@ def run_e2e_validation(
     pruned_successes = 0
     full_pattern_hits = 0
     pruned_pattern_hits = 0
+    pattern_query_count = 0
     reductions = []
     full_latencies = []
     pruned_latencies = []
@@ -348,18 +349,21 @@ def run_e2e_validation(
         if pruned_result["success"]:
             pruned_successes += 1
 
-        # Check SQL pattern
+        # Check SQL pattern (only count queries that define one)
         full_pattern = check_sql_pattern(full_sql, expected_pattern)
         pruned_pattern = check_sql_pattern(
             pruned_sql, expected_pattern
         )
-        if full_pattern:
-            full_pattern_hits += 1
-        if pruned_pattern:
-            pruned_pattern_hits += 1
+        if expected_pattern:
+            pattern_query_count += 1
+            if full_pattern:
+                full_pattern_hits += 1
+            if pruned_pattern:
+                pruned_pattern_hits += 1
 
         pattern_col = (
-            "F/P" if full_pattern and pruned_pattern
+            "n/a" if not expected_pattern
+            else "F/P" if full_pattern and pruned_pattern
             else f"{'F' if full_pattern else '-'}/"
                  f"{'P' if pruned_pattern else '-'}"
         )
@@ -464,11 +468,11 @@ def run_e2e_validation(
     )
     logger.info(
         f"  SQL pattern (full):   "
-        f"{full_pattern_hits}/{n}"
+        f"{full_pattern_hits}/{pattern_query_count}"
     )
     logger.info(
         f"  SQL pattern (pruned): "
-        f"{pruned_pattern_hits}/{n}"
+        f"{pruned_pattern_hits}/{pattern_query_count}"
     )
     logger.info(
         f"  Mean token reduction: "
