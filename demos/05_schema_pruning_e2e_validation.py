@@ -480,7 +480,7 @@ def run_e2e_validation(
     )
     logger.info(
         f"  Mean latency (full):  "
-        f"{mean_full_lat:.2f}s"
+        f"{mean_full_lat:.2f}s  (wall-clock)"
     )
     logger.info(
         f"  Mean latency (pruned):"
