@@ -392,6 +392,7 @@ def run_e2e_validation(
                 "prompt_tokens", 0
             ),
             "reduction_pct": reduction,
+            "full_first": full_first,
             "tables_selected": prune_result.selected_tables,
             "tables_expected": gq["expected_tables"],
         }
