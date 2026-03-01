@@ -485,7 +485,8 @@ def run_e2e_validation(
     logger.info(
         f"  Mean latency (pruned):"
         f" {mean_pruned_lat:.2f}s"
-        f" (-{latency_delta:.1f}%)"
+        f" ({'-' if latency_delta > 0 else '+'}"
+        f"{abs(latency_delta):.1f}%)"
     )
     prompt_token_saving = (
         (total_full_prompt_tokens - total_pruned_prompt_tokens)
@@ -499,7 +500,8 @@ def run_e2e_validation(
     logger.info(
         f"  Prompt tokens (pruned):"
         f" {total_pruned_prompt_tokens:,}"
-        f" (-{prompt_token_saving:.1f}%)"
+        f" ({'-' if prompt_token_saving > 0 else '+'}"
+        f"{abs(prompt_token_saving):.1f}%)"
     )
     logger.info("")
     logger.info("  Outcome breakdown:")
