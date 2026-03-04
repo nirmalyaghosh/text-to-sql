@@ -6,5 +6,6 @@ data/*.db
 logs/
 .ipynb_checkpoints/
 *.egg-info/
+
 dist/
 build/

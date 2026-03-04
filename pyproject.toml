@@ -9,16 +9,21 @@ dependencies = [
     "openai>=1.0",
     "anthropic>=0.40",
     "pydantic>=2.0",
+    "pydantic-ai>=0.1,<1.0",
     "tiktoken>=0.5",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-asyncio>=0.24",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [build-system]
 requires = ["setuptools>=75.0"]
