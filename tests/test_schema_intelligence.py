@@ -273,6 +273,113 @@ class TestFallbackExtraction:
         assert result.tables == []
 
 
+# --- Schema Pruning Cache ---
+
+
+class TestSchemaPruningCache:
+    """
+    Tests for schema pruning result caching.
+    """
+
+    def test_cache_clear(self, agent):
+        """
+        Clear empties cache and resets counters.
+        """
+        agent._cache.set("q1", {"data": "v1"})
+        agent._cache.get("q1")  # hit
+        agent._cache.clear()
+        assert agent._cache.get("q1") is None
+        assert agent._cache.hits == 0
+
+    def test_cache_injected_by_default(self):
+        """
+        Agent has cache by default.
+        """
+        agent = SchemaIntelligenceAgent()
+        assert agent._cache is not None
+        assert agent._cache.hits == 0
+        assert agent._cache.misses == 0
+
+    def test_cache_stores_pruning_result(self, agent):
+        """
+        Cache stores and retrieves pruning data.
+        """
+        agent._build_fk_graph(SAMPLE_DDL)
+        selected = agent._find_minimal_tables(
+            {"orders"}, max_depth=1
+        )
+        pruned = agent._prune_schema(selected)
+        token_bench = agent._benchmark_tokens(
+            SAMPLE_DDL, pruned
+        )
+        fk_paths = agent._get_fk_paths(selected)
+
+        cache_data = {
+            "selected_tables": sorted(selected),
+            "pruned_schema": pruned,
+            "token_benchmark": token_bench,
+            "fk_paths": fk_paths,
+            "entities_extracted": {
+                "tables": ["orders"],
+                "columns": [],
+                "business_entities": [],
+            },
+        }
+        agent._cache.set("test query", cache_data)
+
+        cached = agent._cache.get("test query")
+        assert cached is not None
+        assert "orders" in cached["selected_tables"]
+        assert agent._cache.hits == 1
+
+    def test_cached_output_has_execution_step(
+        self, agent
+    ):
+        """
+        Cached output includes execution step.
+        """
+        agent._build_fk_graph(SAMPLE_DDL)
+        cache_data = {
+            "selected_tables": ["orders"],
+            "pruned_schema": "CREATE TABLE orders...",
+            "token_benchmark": {
+                "full_schema_tokens": 100,
+                "pruned_schema_tokens": 30,
+                "reduction_pct": 70.0,
+            },
+            "fk_paths": [],
+            "entities_extracted": {
+                "tables": ["orders"],
+                "columns": [],
+                "business_entities": [],
+            },
+        }
+        output = agent._build_cached_output(
+            "test query", cache_data, 0.5
+        )
+        step = output["execution_step"]
+        assert step.action == (
+            "schema_selection_cache_hit"
+        )
+        assert step.output_data["cache_hit"] is True
+        assert step.duration_ms == 0.5
+
+    def test_different_queries_cached_separately(
+        self, agent
+    ):
+        """
+        Different queries are separate entries.
+        """
+        agent._cache.set("query A", {"data": "A"})
+        agent._cache.set("query B", {"data": "B"})
+        assert (
+            agent._cache.get("query A")["data"] == "A"
+        )
+        assert (
+            agent._cache.get("query B")["data"] == "B"
+        )
+
+
 # --- _get_fk_paths ---
 
 

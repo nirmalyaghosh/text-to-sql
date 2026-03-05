@@ -5,6 +5,10 @@ Implements a multi-agent architecture with genuine
 agency using Pydantic AI.
 """
 
+from text_to_sql.agents.cache import (
+    CacheBackend,
+    InProcessTTLCache,
+)
 from text_to_sql.agents.orchestrator import (
     OrchestratorAgent,
 )
@@ -31,9 +35,11 @@ from text_to_sql.agents.types import (
 
 __all__ = [
     "AgenticResponse",
+    "CacheBackend",
     "EntityExtraction",
     "ExecutionChainStep",
     "GeneratedSQL",
+    "InProcessTTLCache",
     "OrchestratorAgent",
     "QueryRefinementAgent",
     "QueryRequest",

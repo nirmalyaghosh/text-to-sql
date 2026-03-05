@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Text-to-SQL blog series: from naïve to agentic to advanced"
 requires-python = ">=3.11"
 dependencies = [
+    "cachetools>=5.0",
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
     "openai>=1.0",

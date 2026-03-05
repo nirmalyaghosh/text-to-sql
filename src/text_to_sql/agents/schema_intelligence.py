@@ -16,6 +16,7 @@ from typing import (
     Any,
     Dict,
     List,
+    Optional,
     Set,
     Tuple,
 )
@@ -25,6 +26,10 @@ import tiktoken
 from pydantic_ai import Agent as PydanticAgent
 
 from text_to_sql.agents.base import BaseAgent
+from text_to_sql.agents.cache import (
+    CacheBackend,
+    InProcessTTLCache,
+)
 from text_to_sql.agents.types import (
     EntityExtraction,
     QueryRequest,
@@ -64,9 +69,20 @@ class SchemaIntelligenceAgent(BaseAgent):
     Benchmarks token reduction as a first-class output.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        cache: Optional[CacheBackend] = None,
+    ):
         """
         Initialize the Schema Intelligence Agent.
+
+        Args:
+            cache: Optional cache backend for schema
+                pruning results. Defaults to an
+                in-process TTL cache (128 entries,
+                5 min TTL). Pass None to disable,
+                or inject a Redis-backed implementation
+                for multi-instance deployments.
         """
         system_prompt = get_prompt("schema_intelligence")
         super().__init__(
@@ -85,6 +101,11 @@ class SchemaIntelligenceAgent(BaseAgent):
             "gpt-4o-mini"
         )
         self._schema_loaded = False
+        self._cache = (
+            cache
+            if cache is not None
+            else InProcessTTLCache()
+        )
 
     def _build_fk_graph(self, full_ddl: str) -> None:
         """
@@ -231,6 +252,22 @@ class SchemaIntelligenceAgent(BaseAgent):
                 )
             )
 
+            # Check cache before LLM entity extraction
+            cached = self._cache.get(query)
+            if cached is not None:
+                duration_ms = (
+                    (time.time() - step_start) * 1000
+                )
+                logger.info(
+                    f"Schema cache hit: "
+                    f"{duration_ms:.2f}ms "
+                    f"(hits={self._cache.hits}, "
+                    f"misses={self._cache.misses})"
+                )
+                return self._build_cached_output(
+                    query, cached, duration_ms
+                )
+
             entities = (
                 await self._extract_entities(
                     query, list(self._all_tables)
@@ -248,8 +285,30 @@ class SchemaIntelligenceAgent(BaseAgent):
                 create_ddl, pruned
             )
             fk_paths = self._get_fk_paths(selected)
+
+            # Cache the deterministic results
+            self._cache.set(query, {
+                "selected_tables": sorted(selected),
+                "pruned_schema": pruned,
+                "token_benchmark": token_bench,
+                "fk_paths": fk_paths,
+                "entities_extracted": {
+                    "tables": entities.tables,
+                    "columns": entities.columns,
+                    "business_entities": (
+                        entities.business_entities
+                    ),
+                },
+            })
+
             duration_ms = (
                 (time.time() - step_start) * 1000
+            )
+            logger.info(
+                f"Schema cache miss: "
+                f"{duration_ms:.2f}ms "
+                f"(hits={self._cache.hits}, "
+                f"misses={self._cache.misses})"
             )
 
             return self._build_schema_output(
@@ -311,6 +370,48 @@ class SchemaIntelligenceAgent(BaseAgent):
             "pruned_schema_tokens": after,
             "reduction_pct": round(reduction, 1),
         }
+
+    def _build_cached_output(
+        self,
+        query: str,
+        cached: Dict[str, Any],
+        duration_ms: float,
+    ) -> Dict[str, Any]:
+        """
+        Helper function used to assemble output from
+        cached pruning results.
+
+        Builds a fresh ExecutionChainStep (for accurate
+        provenance timestamps) but reuses the cached
+        tables, schema, and token benchmarks.
+        """
+        output = dict(cached)
+        output["execution_step"] = (
+            self.create_execution_step(
+                action="schema_selection_cache_hit",
+                input_data={"query": query},
+                output_data={
+                    "tables": cached[
+                        "selected_tables"
+                    ],
+                    "tokens_before": (
+                        cached["token_benchmark"]
+                        .get("full_schema_tokens", 0)
+                    ),
+                    "tokens_after": (
+                        cached["token_benchmark"]
+                        .get("pruned_schema_tokens", 0)
+                    ),
+                    "reduction_pct": (
+                        cached["token_benchmark"]
+                        .get("reduction_pct", 0)
+                    ),
+                    "cache_hit": True,
+                },
+                duration_ms=duration_ms,
+            )
+        )
+        return output
 
     def _build_schema_output(
         self,
