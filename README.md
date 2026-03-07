@@ -163,6 +163,17 @@ uv run python -m demos.06_agentic_ablation_study --query GQ-002
 
 Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
 
+### Observability
+
+Every LLM call across the entire codebase (naive demos, schema pruning e2e, and the agentic pipeline) is logged to `logs/token_usage.jsonl`. Each entry records the model, prompt preview, and token counts (input/output). Entries are linked by `request_id` within a `run_id`.
+
+End-to-end validation outcomes (row counts, pattern match, schema reduction) are logged separately to `logs/e2e_validation_results.jsonl`. The `run_id` field links entries across both files for cost-per-query analysis.
+
+```bash
+# Tail recent token usage
+tail -5 logs/token_usage.jsonl | python -m json.tool
+```
+
 ### Tests
 
 98 unit tests cover deterministic logic (no LLM calls needed):

@@ -122,9 +122,21 @@ def log_llm_response(
         "question": question,
         "generated_sql_preview": generated_sql_preview,
         "usage": {
-            "prompt_tokens": usage.get("prompt_tokens", 0),
-            "completion_tokens": usage.get("completion_tokens", 0),
-            "total_tokens": usage.get("total_tokens", 0),
+            "prompt_tokens": (
+                usage.get("prompt_tokens")
+                or usage.get("input_tokens", 0)
+            ),
+            "completion_tokens": (
+                usage.get("completion_tokens")
+                or usage.get("output_tokens", 0)
+            ),
+            "total_tokens": (
+                usage.get("total_tokens")
+                or (
+                    usage.get("input_tokens", 0)
+                    + usage.get("output_tokens", 0)
+                )
+            ),
         },
     }
     _write_entry(entry)

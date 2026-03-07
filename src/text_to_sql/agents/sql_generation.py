@@ -28,6 +28,10 @@ from text_to_sql.agents.types import (
 )
 from text_to_sql.app_logger import get_logger
 from text_to_sql.prompts.prompts import get_prompt
+from text_to_sql.usage_tracker import (
+    log_llm_request,
+    log_llm_response,
+)
 
 
 logger = get_logger(__name__)
@@ -65,10 +69,12 @@ class SQLGenerationAgent(BaseAgent):
             system_prompt=system_prompt,
             output_type=GeneratedSQL,
         )
-        critique_prompt = get_prompt("sql_critique")
+        self._critique_prompt = get_prompt(
+            "sql_critique"
+        )
         self._critique_agent = PydanticAgent(
             model=self.model,
-            system_prompt=critique_prompt,
+            system_prompt=self._critique_prompt,
             output_type=SQLCritique,
         )
 
@@ -108,8 +114,35 @@ class SQLGenerationAgent(BaseAgent):
             f"5. Any missing WHERE clauses?"
         )
         try:
+            request_id = log_llm_request(
+                model=self.model,
+                system_prompt=(
+                    self._critique_prompt
+                ),
+                user_prompt=prompt,
+                question=query,
+            )
             result = await self._critique_agent.run(
                 prompt
+            )
+            usage = result.usage()
+            log_llm_response(
+                request_id=request_id,
+                model=self.model,
+                question=query,
+                usage={
+                    "input_tokens": (
+                        usage.input_tokens
+                    ),
+                    "output_tokens": (
+                        usage.output_tokens
+                    ),
+                },
+                generated_sql=(
+                    "[critique] "
+                    f"valid={result.output.is_valid}"
+                ),
+                trim_sql_preview=False,
             )
             return result.output
         except Exception as e:
@@ -440,7 +473,30 @@ class SQLGenerationAgent(BaseAgent):
         prompt = "\n".join(prompt_parts)
 
         try:
-            result = await self._gen_agent.run(prompt)
+            request_id = log_llm_request(
+                model=self.model,
+                system_prompt=self.system_prompt,
+                user_prompt=prompt,
+                question=query,
+            )
+            result = await self._gen_agent.run(
+                prompt
+            )
+            usage = result.usage()
+            log_llm_response(
+                request_id=request_id,
+                model=self.model,
+                question=query,
+                usage={
+                    "input_tokens": (
+                        usage.input_tokens
+                    ),
+                    "output_tokens": (
+                        usage.output_tokens
+                    ),
+                },
+                generated_sql=result.output.sql,
+            )
             return result.output
         except Exception as e:
             logger.error(
