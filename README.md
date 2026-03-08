@@ -6,7 +6,7 @@ This repository supports the following blog posts in the multi-part blog series.
 
 1. [**The Naïve Way**](https://www.nirmalya.net/posts/2026/02/text-to-sql-naive-way/) - Why prompt-and-pray fails on enterprise data
 2. **Schema Pruning** - FK-graph traversal to minimize token waste ([details](#schema-pruning))
-3. **Agentic Text-to-SQL** - Multi-agent system with security governance *(coming soon)*
+3. **Agentic Text-to-SQL** - Multi-agent system with security governance ([details](#agentic-text-to-sql))
 4. **Red-Teaming the Security Agent** - Crescendo-style multi-turn jailbreak detection *(coming soon)*
 
 ## Setup
@@ -128,3 +128,56 @@ print(f"{result.full_schema_tokens} -> {result.pruned_schema_tokens} tokens")
 ```
 
 Link to [blog post](https://www.nirmalya.net/posts/2026/02/text-to-sql-schema-pruning/).
+
+## Agentic Text-to-SQL
+
+Five specialised agents, built on [Pydantic AI](https://ai.pydantic.dev/), collaborate through an orchestrator to convert natural language to SQL:
+
+| Agent | Responsibility |
+|---|---|
+| **Orchestrator** | Sequences the pipeline, collects execution chain for provenance |
+| **Query Refinement** | Temporal resolution, pronoun/entity mapping, ambiguity detection |
+| **Security & Governance** | RBAC, PII detection, read-only enforcement, risk scoring (veto power) |
+| **Schema Intelligence** | Entity extraction via LLM, FK-graph BFS for join paths, DDL pruning |
+| **SQL Generation** | LLM-based generation with a self-critique loop (up to 3 attempts) |
+
+Key design choices:
+
+- **Fail-closed security**: the Security agent can veto any query; critique failures default to invalid (retry, not pass-through)
+- **Self-critique loop**: a separate critique agent reviews generated SQL for correctness before accepting it; corrections are syntax-validated before use
+- **Provenance tracking**: every agent records an `ExecutionChainStep` so the full decision trail is inspectable
+- **Cross-turn context**: conversation history flows through the pipeline for multi-turn queries
+
+```bash
+# Core demo (Refinement + Security + Orchestrator)
+uv run python -m demos.06_agentic_core
+
+# Full pipeline (all 5 agents end-to-end)
+uv run python -m demos.06_agentic_full_pipeline
+
+# Ablation study (measure each agent's contribution)
+uv run python -m demos.06_agentic_ablation_study
+uv run python -m demos.06_agentic_ablation_study --verbose
+uv run python -m demos.06_agentic_ablation_study --query GQ-002
+```
+
+Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
+
+### Observability
+
+Every LLM call across the entire codebase (naive demos, schema pruning e2e, and the agentic pipeline) is logged to `logs/token_usage.jsonl`. Each entry records the model, prompt preview, and token counts (input/output). Entries are linked by `request_id` within a `run_id`.
+
+End-to-end validation outcomes (row counts, pattern match, schema reduction) are logged separately to `logs/e2e_validation_results.jsonl`. The `run_id` field links entries across both files for cost-per-query analysis.
+
+```bash
+# Tail recent token usage
+tail -5 logs/token_usage.jsonl | python -m json.tool
+```
+
+### Tests
+
+98 unit tests cover deterministic logic (no LLM calls needed):
+
+```bash
+uv run pytest tests/ -v
+```
