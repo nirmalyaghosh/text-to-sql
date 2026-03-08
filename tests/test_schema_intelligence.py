@@ -405,3 +405,72 @@ class TestGetFKPaths:
             {"products", "customers"}
         )
         assert len(paths) == 0
+
+
+# --- Context Budget ---
+
+
+class TestContextBudget:
+    """
+    Tests for dynamic context budget checking.
+    """
+
+    def test_budget_within_limit(self, agent):
+        """
+        Budget: pruned schema within default budget
+        returns positive value.
+        """
+        agent._build_fk_graph(SAMPLE_DDL)
+        pruned = agent._prune_schema({"orders"})
+        pruned_tokens = agent._count_tokens(pruned)
+        budget = agent._available_token_budget(
+            committed_tokens=500
+        )
+        assert budget > pruned_tokens
+
+    def test_budget_exceeded_returns_negative(
+        self, agent
+    ):
+        """
+        Budget: tiny context window yields negative
+        available budget.
+        """
+        import text_to_sql.agents.base as base_mod
+        original = base_mod.MODEL_CONTEXT_WINDOWS.get(
+            agent.model
+        )
+        try:
+            base_mod.MODEL_CONTEXT_WINDOWS[
+                agent.model
+            ] = 100
+            budget = agent._available_token_budget(
+                committed_tokens=50
+            )
+            # 100 - 50 - 4096 (default reserve) < 0
+            assert budget < 0
+        finally:
+            if original is not None:
+                base_mod.MODEL_CONTEXT_WINDOWS[
+                    agent.model
+                ] = original
+
+    def test_unknown_model_uses_fallback(self):
+        """
+        Budget: unknown model falls back to
+        DEFAULT_CONTEXT_WINDOW.
+        """
+        from text_to_sql.agents.base import (
+            DEFAULT_CONTEXT_WINDOW,
+            DEFAULT_OUTPUT_RESERVE,
+        )
+        agent = SchemaIntelligenceAgent()
+        agent.model = "unknown:fake-model"
+        budget = agent._available_token_budget(
+            committed_tokens=1000
+        )
+        expected = (
+            DEFAULT_CONTEXT_WINDOW
+            - 1000
+            - DEFAULT_OUTPUT_RESERVE
+        )
+        assert budget == expected

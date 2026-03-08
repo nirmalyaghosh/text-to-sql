@@ -221,3 +221,53 @@ class TestRecord:
         )
         assert len(history) == 2
         assert history[1]["attempt"] == 2
+
+
+class TestContextBudget:
+    """
+    Tests for dynamic context budget in SQL
+    generation.
+    """
+
+    def test_budget_sufficient(self, agent):
+        """
+        Budget: normal prompt fits within default
+        context window.
+        """
+        prompt = "Schema:\nCREATE TABLE t(id INT);"
+        tokens = agent._count_tokens(prompt)
+        sys_tokens = agent._count_tokens(
+            agent.system_prompt
+        )
+        budget = agent._available_token_budget(
+            tokens + sys_tokens
+        )
+        assert budget > 0
+
+    def test_budget_exceeded_tiny_window(self, agent):
+        """
+        Budget: tiny context window makes prompt
+        exceed budget.
+        """
+        import text_to_sql.agents.base as base_mod
+        original = base_mod.MODEL_CONTEXT_WINDOWS.get(
+            agent.model
+        )
+        try:
+            base_mod.MODEL_CONTEXT_WINDOWS[
+                agent.model
+            ] = 100
+            prompt = "Schema:\nCREATE TABLE t(id INT);"
+            tokens = agent._count_tokens(prompt)
+            sys_tokens = agent._count_tokens(
+                agent.system_prompt
+            )
+            budget = agent._available_token_budget(
+                tokens + sys_tokens
+            )
+            assert budget < 0
+        finally:
+            if original is not None:
+                base_mod.MODEL_CONTEXT_WINDOWS[
+                    agent.model
+                ] = original

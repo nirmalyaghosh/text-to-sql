@@ -21,8 +21,6 @@ from typing import (
     Tuple,
 )
 
-import tiktoken
-
 from pydantic_ai import Agent as PydanticAgent
 
 from text_to_sql.agents.base import BaseAgent
@@ -101,9 +99,6 @@ class SchemaIntelligenceAgent(BaseAgent):
         self._fk_details: List[Dict[str, str]] = []
         self._table_ddl: Dict[str, str] = {}
         self._all_tables: Set[str] = set()
-        self._encoder = tiktoken.encoding_for_model(
-            "gpt-4o-mini"
-        )
         self._schema_loaded = False
         self._cache = (
             cache
@@ -209,19 +204,6 @@ class SchemaIntelligenceAgent(BaseAgent):
             "to_col": ref_col,
         })
 
-    def _count_tokens(self, text: str) -> int:
-        """
-        Helper function used to count tokens via
-        tiktoken.
-
-        Args:
-            text: Text to count tokens for
-
-        Returns:
-            Token count
-        """
-        return len(self._encoder.encode(text))
-
     async def _execute_internal(
         self,
         request: QueryRequest,
@@ -288,6 +270,79 @@ class SchemaIntelligenceAgent(BaseAgent):
             token_bench = self._benchmark_tokens(
                 create_ddl, pruned
             )
+
+            # Context budget check: fail explicitly
+            # if pruned schema won't fit in the
+            # model's context window.
+            query_tokens = self._count_tokens(query)
+            prompt_tokens = self._count_tokens(
+                self.system_prompt
+            )
+            committed = prompt_tokens + query_tokens
+            budget = self._available_token_budget(
+                committed
+            )
+            pruned_tokens = token_bench[
+                "pruned_schema_tokens"
+            ]
+            if pruned_tokens > budget:
+                duration_ms = (
+                    (time.time() - step_start)
+                    * 1000
+                )
+                logger.warning(
+                    f"Pruned schema ({pruned_tokens}"
+                    f" tokens) exceeds available "
+                    f"budget ({budget} tokens)"
+                )
+                return {
+                    "selected_tables": [],
+                    "pruned_schema": "",
+                    "token_benchmark": token_bench,
+                    "fk_paths": [],
+                    "entities_extracted": {},
+                    "error": (
+                        f"Pruned schema "
+                        f"({pruned_tokens} tokens)"
+                        f" exceeds context budget "
+                        f"({budget} tokens)"
+                    ),
+                    "execution_step": (
+                        self.create_execution_step(
+                            action=(
+                                "schema_context"
+                                "_exceeded"
+                            ),
+                            input_data={
+                                "query": query,
+                                "pruned_tokens": (
+                                    pruned_tokens
+                                ),
+                                "budget": budget,
+                                "committed": (
+                                    committed
+                                ),
+                            },
+                            output_data={
+                                "tables": sorted(
+                                    selected
+                                ),
+                                "token_benchmark": (
+                                    token_bench
+                                ),
+                            },
+                            veto_reason=(
+                                "Pruned schema "
+                                "exceeds context "
+                                "budget"
+                            ),
+                            duration_ms=(
+                                duration_ms
+                            ),
+                        )
+                    ),
+                }
+
             fk_paths = self._get_fk_paths(selected)
 
             # Cache the deterministic results

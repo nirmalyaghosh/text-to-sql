@@ -472,6 +472,24 @@ class SQLGenerationAgent(BaseAgent):
 
         prompt = "\n".join(prompt_parts)
 
+        # Context budget check
+        prompt_tokens = self._count_tokens(prompt)
+        system_tokens = self._count_tokens(
+            self.system_prompt
+        )
+        committed = prompt_tokens + system_tokens
+        budget = self._available_token_budget(
+            committed
+        )
+        if budget < 0:
+            logger.warning(
+                f"SQL generation prompt "
+                f"({committed} tokens) exceeds "
+                f"context budget by "
+                f"{abs(budget)} tokens"
+            )
+            return None
+
         try:
             request_id = log_llm_request(
                 model=self.model,
