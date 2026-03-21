@@ -842,10 +842,14 @@ def main() -> None:
     new_count = 0
     retry_total = 0
     failed_slots = 0
+    active_count = sum(
+        1 for q in queries
+        if not q.get("superseded")
+    )
     next_id = len(queries) + 1
     max_new = min(
         total_gap,
-        target - len(queries),
+        target - active_count,
     )
 
     if max_new <= 0:
@@ -982,6 +986,7 @@ def main() -> None:
                 record = _build_record(
                     candidate=candidate,
                     query_id=qid,
+                    model=model,
                 )
                 queries.append(record)
                 vector_queries.append(record)
@@ -1187,6 +1192,7 @@ def _behavioral_fingerprint(
 def _build_record(
     candidate: Dict[str, Any],
     query_id: str,
+    model: str = "",
 ) -> Dict[str, Any]:
     """
     Helper function used to construct a query
@@ -1196,6 +1202,7 @@ def _build_record(
     return {
         "id": query_id,
         "blog_example_id": None,
+        "generated_by": model,
         "vector": candidate["vector"],
         "attack_technique": (
             candidate["attack_technique"]
