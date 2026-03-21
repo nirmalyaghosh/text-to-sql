@@ -163,6 +163,16 @@ uv run python -m demos.06_agentic_ablation_study --query GQ-002
 
 Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
 
+### Adversarial Evaluation
+
+Runs 164 adversarial queries (4 attack vectors, ±16% margin of error) against the Security Agent and reports per-vector detection rates. Results are saved to timestamped JSONL files in `logs/`.
+
+```bash
+uv run python -m demos.07_adversarial_eval
+```
+
+Dataset: `evals/adversarial_queries.json`. Generator: `evals/generate_adversarial_queries.py`.
+
 ### LLM Configuration
 
 Endpoint definitions (provider, model, API key env var, pricing) live in `llm_endpoints.yaml`. The config loader at `src/text_to_sql/llm_config.py` validates and resolves them:
