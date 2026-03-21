@@ -31,7 +31,7 @@ source .venv/bin/activate   # Linux/macOS
 pip install -e ".[dev]"
 
 # 3. Configure environment
-cp .env.example .env
+cp env.example .env
 # Edit .env with your Neon DATABASE_URL and LLM API key
 
 # 4. Initialize database
@@ -162,6 +162,19 @@ uv run python -m demos.06_agentic_ablation_study --query GQ-002
 ```
 
 Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
+
+### LLM Configuration
+
+Endpoint definitions (provider, model, API key env var, pricing) live in `llm_endpoints.yaml`. The config loader at `src/text_to_sql/llm_config.py` validates and resolves them:
+
+```python
+from text_to_sql.llm_config import get_client, get_model_name
+
+client = get_client("openai-gpt4o-mini")
+model = get_model_name("openai-gpt4o-mini")
+```
+
+See `env.example` for required API key variables.
 
 ### Observability
 

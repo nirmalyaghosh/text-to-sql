@@ -1,0 +1,64 @@
+# =============================================================================
+# LLM Endpoints Configuration
+# =============================================================================
+# Secrets: referenced via api_key_env, resolved from environment variables.
+# Never commit actual keys. Use .env or your secrets manager.
+#
+# PRICING POLICY:
+#   All pricing_url values MUST point to first-party official pages only.
+#   No aggregators, no third-party calculators.
+#   pricing_checked is the date the numbers were last verified against
+#   that URL in a browser. Re-verify when pricing_checked > 30 days old.
+#   All rates in USD per 1M tokens.
+#
+# Usage: load with llm_config.py -> validated EndpointConfig objects
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Defaults: inherited by all endpoints unless overridden
+# -----------------------------------------------------------------------------
+defaults:
+  timeout_seconds: 60
+  max_retries: 3
+  retry_backoff_factor: 2.0
+
+# -----------------------------------------------------------------------------
+# Endpoints
+# -----------------------------------------------------------------------------
+endpoints:
+
+  # ---------------------------------------------------------------------------
+  # OpenAI (direct)
+  # Source: https://openai.com/api/pricing/
+  # ---------------------------------------------------------------------------
+  openai-gpt4o:
+    provider: openai
+    model: gpt-4o
+    api_key_env: OPENAI_API_KEY
+    cost:
+      input_per_1m: 2.50
+      output_per_1m: 10.00
+      pricing_url: https://openai.com/api/pricing/
+      pricing_checked: "2026-03-21"
+
+  openai-gpt4o-mini:
+    provider: openai
+    model: gpt-4o-mini
+    api_key_env: OPENAI_API_KEY
+    cost:
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+      pricing_url: https://openai.com/api/pricing/
+      pricing_checked: "2026-03-21"
+
+# -----------------------------------------------------------------------------
+# Role assignments: which endpoint serves which function
+# -----------------------------------------------------------------------------
+# Soft mappings, not enforced by the loader.
+# Override per-project via project-level config or environment.
+# -----------------------------------------------------------------------------
+roles:
+
+  default:
+    classification: openai-gpt4o-mini
+    benchmark_baseline: openai-gpt4o
