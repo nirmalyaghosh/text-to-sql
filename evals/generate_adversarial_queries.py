@@ -699,6 +699,7 @@ def generate_candidate(
                     "total_tokens": usage.total_tokens,
                 },
                 generated_sql=content[:200] if content else "",
+                purpose="aq_generation",
             )
         if not content:
             logger.warning("Empty LLM response")

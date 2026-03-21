@@ -71,6 +71,7 @@ def log_llm_request(
     system_prompt: str,
     user_prompt: str,
     question: str,
+    purpose: str = "pipeline",
 ) -> str:
     """
     Log an LLM request with prompt previews.
@@ -84,6 +85,7 @@ def log_llm_request(
     request_id = f"{_run_id}-{_request_counter:03d}"
     entry = {
         "event": "llm_request",
+        "purpose": purpose,
         "request_id": request_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
@@ -104,6 +106,7 @@ def log_llm_response(
     usage: dict,
     generated_sql: str,
     trim_sql_preview: bool = False,
+    purpose: str = "pipeline",
 ) -> None:
     """
     Log an LLM response with token usage.
@@ -116,6 +119,7 @@ def log_llm_response(
 
     entry = {
         "event": "llm_response",
+        "purpose": purpose,
         "request_id": request_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
