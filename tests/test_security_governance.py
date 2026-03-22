@@ -496,6 +496,103 @@ async def test_pii_aadhaar_blocked_when_extended(
     assert result.get("allowed") is False
 
 
+# --- Post-generation SQL audit ---
+
+
+@pytest.mark.asyncio
+async def test_audit_blocks_delete(agent):
+    """Audit: DELETE FROM is blocked."""
+    result = await agent.audit_generated_sql(
+        "DELETE FROM orders WHERE id > 100"
+    )
+    assert result.get("safe") is False
+
+
+@pytest.mark.asyncio
+async def test_audit_blocks_drop(agent):
+    """Audit: DROP TABLE is blocked."""
+    result = await agent.audit_generated_sql(
+        "DROP TABLE customers"
+    )
+    assert result.get("safe") is False
+
+
+@pytest.mark.asyncio
+async def test_audit_blocks_insert(agent):
+    """Audit: INSERT INTO is blocked."""
+    result = await agent.audit_generated_sql(
+        "INSERT INTO orders VALUES (1, 'test')"
+    )
+    assert result.get("safe") is False
+
+
+@pytest.mark.asyncio
+async def test_audit_blocks_update(agent):
+    """Audit: UPDATE...SET is blocked."""
+    result = await agent.audit_generated_sql(
+        "UPDATE orders SET status = 'cancelled'"
+    )
+    assert result.get("safe") is False
+
+
+@pytest.mark.asyncio
+async def test_audit_nric_blocked_with_extended(
+    agent_extended_pii,
+):
+    """
+    Audit: NRIC blocked when extended_pii is True.
+    """
+    result = await agent_extended_pii.audit_generated_sql(
+        sql="SELECT nric FROM customers",
+        user_role="analyst",
+    )
+    assert result.get("safe") is False
+    assert "PII" in result.get("reason", "")
+
+
+@pytest.mark.asyncio
+async def test_audit_nric_passes_without_extended(agent):
+    """
+    Audit: NRIC not flagged when extended_pii is
+    False (default).
+    """
+    result = await agent.audit_generated_sql(
+        sql="SELECT nric FROM customers",
+        user_role="analyst",
+    )
+    assert result.get("safe") is True
+
+
+@pytest.mark.asyncio
+async def test_audit_pii_allowed_for_admin(agent):
+    """Audit: admin CAN get PII via generated SQL."""
+    result = await agent.audit_generated_sql(
+        sql="SELECT email FROM customers",
+        user_role="admin",
+    )
+    assert result.get("safe") is True
+
+
+@pytest.mark.asyncio
+async def test_audit_pii_blocked_for_analyst(agent):
+    """Audit: analyst cannot get PII via generated SQL."""
+    result = await agent.audit_generated_sql(
+        sql="SELECT email FROM customers",
+        user_role="analyst",
+    )
+    assert result.get("safe") is False
+    assert "PII" in result.get("reason", "")
+
+
+@pytest.mark.asyncio
+async def test_audit_safe_select(agent):
+    """Audit: safe SELECT passes."""
+    result = await agent.audit_generated_sql(
+        "SELECT COUNT(*) FROM orders"
+    )
+    assert result.get("safe") is True
+
+
 @pytest.mark.asyncio
 async def test_pii_chinese_id_blocked_when_extended(
     agent_extended_pii, make_request,

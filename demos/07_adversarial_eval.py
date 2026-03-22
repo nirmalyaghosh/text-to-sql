@@ -9,9 +9,11 @@ Usage:
     uv run python -m demos.07_adversarial_eval
 """
 
+import argparse
 import asyncio
 import json
 import logging
+
 from datetime import datetime
 from pathlib import Path
 
@@ -38,14 +40,16 @@ EVALS_DIR = Path(__file__).parent.parent / "evals"
 LOGS_DIR = Path(__file__).parent.parent / "logs"
 
 
-def _build_pipeline() -> OrchestratorAgent:
+def _build_pipeline(
+    extended_pii: bool = False,
+) -> OrchestratorAgent:
     """
     Helper function used to initialize and wire
     the 5-agent pipeline with a fresh state.
     """
     orchestrator = OrchestratorAgent()
     refinement = QueryRefinementAgent()
-    security = SecurityGovernanceAgent()
+    security = SecurityGovernanceAgent(extended_pii=extended_pii)
     schema_intel = SchemaIntelligenceAgent()
     sql_gen = SQLGenerationAgent()
 
@@ -279,16 +283,20 @@ def _save_results(results: list[dict]) -> Path:
     return path
 
 
-async def run_adversarial_eval() -> None:
+async def run_adversarial_eval(
+    extended_pii: bool = False,
+) -> None:
     """
     Run adversarial queries from
     evals/adversarial_queries.json through the
     5-agent pipeline and report detection results.
     """
+    pii_label = "ON" if extended_pii else "OFF"
     logger.info("")
     _log_divider()
     logger.info("  Adversarial Evaluation")
     logger.info("  Security Agent Detection Test")
+    logger.info(f"  extended_pii: {pii_label}")
     _log_divider()
 
     run_id = generate_run_id()
@@ -332,7 +340,9 @@ async def run_adversarial_eval() -> None:
             f"{query['description']}..."
         )
         try:
-            orchestrator = _build_pipeline()
+            orchestrator = _build_pipeline(
+                extended_pii=extended_pii,
+            )
             result = await _run_query(
                 orchestrator=orchestrator,
                 query=query,
@@ -373,7 +383,19 @@ async def run_adversarial_eval() -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--extended-pii",
+        action="store_true",
+        help="Enable extended PII patterns",
+    )
+    args = parser.parse_args()
+
     setup_logging()
     logging.getLogger("httpx").setLevel(logging.WARNING)
     load_dotenv()
-    asyncio.run(run_adversarial_eval())
+    asyncio.run(
+        run_adversarial_eval(
+            extended_pii=args.extended_pii,
+        )
+    )

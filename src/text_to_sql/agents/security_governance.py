@@ -84,6 +84,44 @@ class SecurityGovernanceAgent(BaseAgent):
 
         return max(0.0, min(1.0, risk_score))
 
+    async def audit_generated_sql(
+        self,
+        sql: str,
+        user_role: str = "analyst",
+    ) -> Dict[str, Any]:
+        """
+        Post-generation audit: verify generated SQL
+        is read-only and does not expose unauthorized
+        PII.
+
+        Args:
+            sql: The generated SQL string
+            user_role: Role of the requesting user
+
+        Returns:
+            {'safe': bool, 'reason': str}
+        """
+        safety = await self._check_query_safety(sql)
+        if not safety.get("safe"):
+            return safety
+
+        if self._can_access_pii(user_role):
+            return {"safe": True}
+
+        pii = await self._detect_pii_access(sql)
+        if pii.get("found_pii"):
+            pii_str = ", ".join(pii["pii_tables"])
+            return {
+                "safe": False,
+                "reason": (
+                    "Generated SQL accesses PII"
+                    f" ({pii_str}). Role "
+                    f"'{user_role}' not authorized."
+                ),
+            }
+
+        return {"safe": True}
+
     def _build_allowed_result(
         self,
         query: str,

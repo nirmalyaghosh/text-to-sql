@@ -10,13 +10,18 @@ Responsibilities:
 """
 
 import time
+
 from typing import (
     Any,
     Dict,
     List,
+    Optional,
 )
 
 from text_to_sql.agents.base import BaseAgent
+from text_to_sql.agents.security_governance import (
+    SecurityGovernanceAgent,
+)
 from text_to_sql.agents.types import (
     AgenticResponse,
     ExecutionChainStep,
@@ -44,7 +49,7 @@ class OrchestratorAgent(BaseAgent):
         system_prompt = get_prompt("orchestrator")
         super().__init__("Orchestrator", system_prompt)
         self.conversation_state = {}
-        self.available_agents = {
+        self.available_agents: Dict[str, Optional[BaseAgent]] = {
             "refinement": None,
             "schema": None,
             "security": None,
@@ -153,6 +158,45 @@ class OrchestratorAgent(BaseAgent):
         generated_sql = sql_result.get("final_sql")
 
         if generated_sql:
+            # Post-generation SQL safety audit
+            sec = self.available_agents.get("security")
+            if isinstance(sec, SecurityGovernanceAgent):
+                role = request.user_context.get("role", "user")
+                audit = await sec.audit_generated_sql(
+                    sql=generated_sql,
+                    user_role=role,
+                )
+                if not audit.get("safe"):
+                    reason = audit.get("reason")
+                    logger.warning(
+                        "Post-generation audit blocked"
+                        f": {reason}"
+                    )
+                    execution_chain.append(
+                        self.create_execution_step(
+                            action=(
+                                "post_gen_audit_blocked"
+                            ),
+                            input_data={
+                                "sql": generated_sql,
+                            },
+                            output_data=audit,
+                            veto_reason=reason,
+                        )
+                    )
+                    return AgenticResponse(
+                        success=False,
+                        formatted_answer=(
+                            "Generated SQL blocked by "
+                            "post-generation safety "
+                            "audit"
+                        ),
+                        error_message=reason,
+                        execution_chain=(
+                            execution_chain
+                        ),
+                    )
+
             # Phase 2 response with SQL
             schema_result = intermediate_results.get(
                 "schema", {}
