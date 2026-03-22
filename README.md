@@ -7,7 +7,7 @@ This repository supports the following blog posts in the multi-part blog series.
 1. [**The Naïve Way**](https://www.nirmalya.net/posts/2026/02/text-to-sql-naive-way/) - Why prompt-and-pray fails on enterprise data
 2. **Schema Pruning** - FK-graph traversal to minimize token waste ([details](#schema-pruning))
 3. **Agentic Text-to-SQL** - Multi-agent system with security governance ([details](#agentic-text-to-sql))
-4. **Red-Teaming the Security Agent** - Crescendo-style multi-turn jailbreak detection *(coming soon)*
+4. [**Where The Security Agent Fails**](https://www.nirmalya.net/posts/2026/03/multi-agent-text-to-sql-security-agent-failure/) - Attack surface analysis across 4 vectors with 168 adversarial queries
 
 ## Setup
 
@@ -165,13 +165,15 @@ Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
 
 ### Adversarial Evaluation
 
-Runs 164 adversarial queries (4 attack vectors, ±16% margin of error) against the Security Agent and reports per-vector detection rates. Results are saved to timestamped JSONL files in `logs/`.
+Runs 168 adversarial queries (4 attack vectors, ±16% margin of error) against the Security Agent and reports per-vector detection rates. Results are saved to timestamped JSONL files in `logs/`.
 
 ```bash
 uv run python -m demos.07_adversarial_eval
 ```
 
-Dataset: `evals/adversarial_queries.json`. Generator: `evals/generate_adversarial_queries.py`.
+Dataset: `evals/adversarial_queries.json` (generated with GPT-4o-mini and DeepSeek V3.2). Generator: `evals/generate_adversarial_queries.py`.
+
+Link to [blog post](https://www.nirmalya.net/posts/2026/03/multi-agent-text-to-sql-security-agent-failure/).
 
 ### LLM Configuration
 
