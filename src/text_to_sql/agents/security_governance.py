@@ -148,7 +148,7 @@ class SecurityGovernanceAgent(BaseAgent):
         return role == "admin"
 
     async def _check_access_control(
-        self, user_context: Dict[str, Any], query: str
+        self, user_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Helper function used to verify user has
@@ -156,7 +156,6 @@ class SecurityGovernanceAgent(BaseAgent):
 
         Args:
             user_context: User role, permissions, etc.
-            query: The query being checked
 
         Returns:
             {'allowed': bool, 'reason': str}
@@ -368,7 +367,7 @@ class SecurityGovernanceAgent(BaseAgent):
             )
 
             access = await self._check_access_control(
-                request.user_context, refined_query
+                request.user_context,
             )
             if not access.get("allowed"):
                 reason = access.get("reason")
