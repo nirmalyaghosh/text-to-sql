@@ -63,8 +63,12 @@ class SecurityGovernanceAgent(BaseAgent):
         # Heuristics for risk scoring
         query_lower = query.lower()
 
-        # Complex joins increase risk (potential for unintended data exposure)
-        join_count = query_lower.count("join")
+        # SQL JOINs increase risk (data exposure).
+        # Pattern matches JOIN <table> ON to avoid
+        # NL false positives like "join date".
+        join_count = len(re.findall(
+            r'\bjoin\s+\w+\s+on\b', query_lower
+        ))
         risk_score += join_count * 0.05
 
         # Aggregates are generally safe

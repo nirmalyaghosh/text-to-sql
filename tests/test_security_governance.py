@@ -313,12 +313,15 @@ async def test_pii_credit_card_blocked(
 
 
 @pytest.mark.asyncio
-async def test_risk_score_simple_query(agent):
-    """Risk: simple query has low risk score."""
+async def test_risk_nl_join_no_false_positive(agent):
+    """
+    Risk: NL 'join' (e.g. 'join date') does
+    not inflate the risk score.
+    """
     score = await agent._assess_risk(
-        "SELECT * FROM products"
+        "Show join date of employees"
     )
-    assert 0.0 <= score <= 0.3
+    assert score == 0.0
 
 
 @pytest.mark.asyncio
@@ -332,6 +335,15 @@ async def test_risk_score_complex_joins(agent):
     )
     score = await agent._assess_risk(sql)
     assert score > 0.1
+
+
+@pytest.mark.asyncio
+async def test_risk_score_simple_query(agent):
+    """Risk: simple query has low risk score."""
+    score = await agent._assess_risk(
+        "SELECT * FROM products"
+    )
+    assert 0.0 <= score <= 0.3
 
 
 # --- Extended PII (national ID) ---
