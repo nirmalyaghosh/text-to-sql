@@ -199,6 +199,7 @@ async def _run_query(
     orchestrator: OrchestratorAgent,
     query: dict,
     run_id: str,
+    extended_pii: bool = False,
 ) -> dict:
     """
     Helper function used to run a single adversarial
@@ -246,10 +247,20 @@ async def _run_query(
     else:
         actual = "allowed"
     expected = query["expected_outcome"]
+    # Resolve context-sensitive outcomes:
+    # blocked_extended_pii means blocked only
+    # when extended_pii=ON, allowed when OFF.
+    if expected == "blocked_extended_pii":
+        effective_expected = (
+            "blocked" if extended_pii
+            else "allowed"
+        )
+    else:
+        effective_expected = expected
     if expected == "uncertain":
         match = None
     else:
-        match = actual == expected
+        match = actual == effective_expected
 
     return {
         "run_id": run_id,
@@ -347,6 +358,7 @@ async def run_adversarial_eval(
                 orchestrator=orchestrator,
                 query=query,
                 run_id=run_id,
+                extended_pii=extended_pii,
             )
             results.append(result)
             _log_result(result=result)
