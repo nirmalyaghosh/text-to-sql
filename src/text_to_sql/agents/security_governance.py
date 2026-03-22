@@ -35,7 +35,7 @@ class SecurityGovernanceAgent(BaseAgent):
     and applies data masking rules.
     """
 
-    def __init__(self):
+    def __init__(self, extended_pii: bool = False):
         """
         Initialize the Security & Governance Agent.
         """
@@ -45,6 +45,7 @@ class SecurityGovernanceAgent(BaseAgent):
         )
         self.policies = self._load_security_policies()
         self.pii_patterns = self._load_pii_patterns()
+        self.pii_field_patterns = self._load_pii_field_patterns(extended_pii)
 
     async def _assess_risk(self, query: str) -> float:
         """
@@ -281,22 +282,9 @@ class SecurityGovernanceAgent(BaseAgent):
         pii_tables = []
         pii_columns = []
 
-        # Define PII field patterns to detect
-        pii_field_patterns = {
-            "email": ["email", "e-mail", "email address"],
-            "phone": ["phone", "phone number", "telephone"],
-            "address": ["address", "street", "city", "zip"],
-            "ssn": ["ssn", "social security"],
-            "salary": ["salary", "compensation", "wage"],
-            "dob": ["dob", "date of birth", "birth date"],
-            "credit_card": [
-                "credit card", "card number", "cc number"
-            ],
-        }
-
         # Check for PII field mentions
         detected_pii = []
-        for pii_type, patterns in pii_field_patterns.items():
+        for pii_type, patterns in self.pii_field_patterns.items():
             for pattern in patterns:
                 if pattern in query_lower:
                     detected_pii.append(pii_type)
@@ -308,7 +296,7 @@ class SecurityGovernanceAgent(BaseAgent):
             for tbl, cols in self.pii_patterns.items():
                 if not any(p in cols for p in detected_pii):
                     continue
-                stem = tbl.rstrip("s")
+                stem = tbl[:-1] if tbl.endswith("s") else tbl
                 if stem in query_lower or tbl in query_lower:
                     pii_tables.append(tbl)
                     pii_columns.extend(detected_pii)
@@ -416,10 +404,58 @@ class SecurityGovernanceAgent(BaseAgent):
         return {
             "customers": [
                 "email", "phone", "address",
-                "ssn", "credit_card",
+                "national_id", "credit_card",
             ],
             "employees": [
-                "ssn", "salary", "dob", "address",
+                "national_id", "salary",
+                "dob", "address",
+            ],
+        }
+
+    def _load_pii_field_patterns(
+        self, extended_pii: bool = False,
+    ) -> Dict[str, list]:
+        """
+        Helper function used to load NL synonym
+        patterns for each PII type. When
+        extended_pii is True, includes national ID
+        patterns for multiple countries.
+        """
+        if extended_pii:
+            national_id = [
+                "nric",  # Singapore
+                "shenfenzheng", "身份证号",  # China
+                "aadhaar", "aadhar",  # India
+                "mykad", "my kad",  # Malaysia
+                "cccd",  # Vietnam
+                "nik", "ktp",  # Indonesia
+                "บัตรประชาชน",  # Thailand
+                "ssn", "social security",  # US
+            ]
+        else:
+            national_id = [
+                "ssn", "social security",
+            ]
+        return {
+            "email": [
+                "email", "e-mail", "email address",
+            ],
+            "phone": [
+                "phone", "phone number", "telephone",
+            ],
+            "address": [
+                "address", "street", "city", "zip",
+            ],
+            "national_id": national_id,
+            "salary": [
+                "salary", "compensation", "wage",
+            ],
+            "dob": [
+                "dob", "date of birth", "birth date",
+            ],
+            "credit_card": [
+                "credit card", "card number",
+                "cc number",
             ],
         }
 

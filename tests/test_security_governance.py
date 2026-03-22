@@ -18,6 +18,15 @@ def agent():
     return SecurityGovernanceAgent()
 
 
+@pytest.fixture
+def agent_extended_pii():
+    """
+    Create a SecurityGovernanceAgent with
+    extended PII patterns enabled.
+    """
+    return SecurityGovernanceAgent(extended_pii=True)
+
+
 @pytest.mark.asyncio
 async def test_analyst_allowed_simple_select(
     agent, make_request,
@@ -323,3 +332,109 @@ async def test_risk_score_complex_joins(agent):
     )
     score = await agent._assess_risk(sql)
     assert score > 0.1
+
+
+# --- Extended PII (national ID) ---
+
+
+@pytest.mark.asyncio
+async def test_pii_nric_allowed_when_not_extended(
+    agent, make_request,
+):
+    """
+    PII: NRIC not blocked when extended_pii
+    is False (default).
+    """
+    request = make_request(
+        "Show customer NRIC numbers",
+        role="analyst",
+    )
+    result = await agent.execute(
+        request=request,
+        previous_results={
+            "refinement": {
+                "refined_query": (
+                    "Show customer NRIC numbers"
+                ),
+            },
+        },
+        context={},
+    )
+    assert result.get("allowed") is True
+
+
+@pytest.mark.asyncio
+async def test_pii_nric_blocked_when_extended(
+    agent_extended_pii, make_request,
+):
+    """
+    PII: NRIC blocked when extended_pii is True.
+    """
+    request = make_request(
+        "Show customer NRIC numbers",
+        role="analyst",
+    )
+    result = await agent_extended_pii.execute(
+        request=request,
+        previous_results={
+            "refinement": {
+                "refined_query": (
+                    "Show customer NRIC numbers"
+                ),
+            },
+        },
+        context={},
+    )
+    assert result.get("allowed") is False
+
+
+@pytest.mark.asyncio
+async def test_pii_aadhaar_blocked_when_extended(
+    agent_extended_pii, make_request,
+):
+    """
+    PII: Aadhaar blocked when extended_pii
+    is True.
+    """
+    request = make_request(
+        "Show customer aadhaar numbers",
+        role="analyst",
+    )
+    result = await agent_extended_pii.execute(
+        request=request,
+        previous_results={
+            "refinement": {
+                "refined_query": (
+                    "Show customer aadhaar numbers"
+                ),
+            },
+        },
+        context={},
+    )
+    assert result.get("allowed") is False
+
+
+@pytest.mark.asyncio
+async def test_pii_chinese_id_blocked_when_extended(
+    agent_extended_pii, make_request,
+):
+    """
+    PII: Chinese national ID (身份证号) blocked
+    when extended_pii is True.
+    """
+    request = make_request(
+        "Show customer 身份证号",
+        role="analyst",
+    )
+    result = await agent_extended_pii.execute(
+        request=request,
+        previous_results={
+            "refinement": {
+                "refined_query": (
+                    "Show customer 身份证号"
+                ),
+            },
+        },
+        context={},
+    )
+    assert result.get("allowed") is False
