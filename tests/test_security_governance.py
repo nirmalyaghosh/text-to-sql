@@ -5,6 +5,8 @@ Tests RBAC, PII detection, destructive query blocking,
 and risk scoring.
 """
 
+from typing import Callable
+
 import pytest
 
 from text_to_sql.agents.security_governance import (
@@ -144,18 +146,14 @@ async def test_pii_allowed_for_admin(
 async def test_destructive_delete_blocked(
     agent, make_request,
 ):
-    """Safety: DELETE queries are blocked."""
-    request = make_request(
-        "DELETE all old orders",
-        role="admin",
-    )
+    """Safety: DELETE FROM queries are blocked."""
+    query = "DELETE FROM orders WHERE id > 100"
+    request = make_request(query, role="admin")
     result = await agent.execute(
         request=request,
         previous_results={
             "refinement": {
-                "refined_query": (
-                    "DELETE all old orders"
-                ),
+                "refined_query": query,
             },
         },
         context={},
@@ -234,6 +232,78 @@ async def test_destructive_alter_blocked(
         context={},
     )
     assert result.get("allowed") is False
+
+
+# --- NL false-positive avoidance ---
+
+
+@pytest.mark.asyncio
+async def test_nl_create_no_false_positive(
+    agent: SecurityGovernanceAgent,
+    make_request: Callable,
+):
+    """
+    Safety: NL 'create' (e.g. 'created date')
+    must not trigger a false positive.
+    """
+    query = "Show created date for each order"
+    request = make_request(query, role="analyst")
+    result = await agent.execute(
+        request=request,
+        previous_results={
+            "refinement": {
+                "refined_query": query,
+            },
+        },
+        context={},
+    )
+    assert result.get("allowed") is True
+
+
+@pytest.mark.asyncio
+async def test_nl_drop_no_false_positive(
+    agent: SecurityGovernanceAgent,
+    make_request: Callable,
+):
+    """
+    Safety: NL 'drop' (e.g. 'drop in revenue')
+    must not trigger a false positive.
+    """
+    query = "Show the biggest drop in revenue"
+    request = make_request(query, role="analyst")
+    result = await agent.execute(
+        request=request,
+        previous_results={
+            "refinement": {
+                "refined_query": query,
+            },
+        },
+        context={},
+    )
+    assert result.get("allowed") is True
+
+
+@pytest.mark.asyncio
+async def test_nl_update_no_false_positive(
+    agent: SecurityGovernanceAgent,
+    make_request: Callable,
+):
+    """
+    Safety: NL 'update' (e.g. 'latest update')
+    must not trigger a false positive.
+    """
+    query = "Show me the latest update"
+    request = make_request(query, role="analyst")
+    result = await agent.execute(
+        request=request,
+        previous_results={
+            "refinement": {
+                "refined_query": query,
+            },
+        },
+        context={},
+    )
+    assert result.get("allowed") is True
 
 
 # --- Additional PII patterns ---

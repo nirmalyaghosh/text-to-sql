@@ -214,7 +214,10 @@ class SecurityGovernanceAgent(BaseAgent):
     async def _check_query_safety(self, query: str) -> Dict[str, Any]:
         """
         Helper function used to ensure the query is
-        read-only (no CREATE, UPDATE, DELETE, DROP).
+        read-only. Uses SQL-contextual patterns
+        (e.g. DELETE FROM, DROP TABLE) instead of
+        bare keywords to avoid false positives on
+        natural language input.
 
         Args:
             query: The query being checked
@@ -222,20 +225,36 @@ class SecurityGovernanceAgent(BaseAgent):
         Returns:
             {'safe': bool, 'reason': str}
         """
-        dangerous_keywords = [
-            "CREATE", "UPDATE", "DELETE", "DROP",
-            "ALTER", "INSERT", "TRUNCATE",
+        dangerous_patterns = [
+            (r"\bALTER\s+TABLE\b", "ALTER TABLE"),
+            (
+                r"\bCREATE\s+(OR\s+REPLACE\s+)?"
+                r"(TABLE|INDEX|VIEW|DATABASE"
+                r"|SCHEMA|PROCEDURE|FUNCTION"
+                r"|TRIGGER)\b",
+                "CREATE",
+            ),
+            (r"\bDELETE\s+FROM\b", "DELETE FROM"),
+            (
+                r"\bDROP\s+(TABLE|INDEX|VIEW"
+                r"|DATABASE|SCHEMA|PROCEDURE"
+                r"|FUNCTION|TRIGGER)\b",
+                "DROP",
+            ),
+            (r"\bINSERT\s+INTO\b", "INSERT INTO"),
+            (r"\bTRUNCATE\b", "TRUNCATE"),
+            (r"\bUPDATE\s+\w+\s+SET\b", "UPDATE...SET"),
         ]
         query_upper = query.upper()
 
-        for keyword in dangerous_keywords:
-            if re.search(rf"\b{keyword}\b", query_upper):
+        for pattern, label in dangerous_patterns:
+            if re.search(pattern, query_upper):
                 return {
                     "safe": False,
                     "reason": (
-                        f"Query contains dangerous keyword: "
-                        f"{keyword}. Only SELECT queries "
-                        "allowed."
+                        "Query contains destructive "
+                        f"pattern: {label}. Only "
+                        "SELECT queries allowed."
                     ),
                 }
 
