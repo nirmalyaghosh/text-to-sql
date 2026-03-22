@@ -11,7 +11,7 @@
 #   that URL in a browser. Re-verify when pricing_checked > 30 days old.
 #   All rates in USD per 1M tokens.
 #
-# Usage: load with llm_config.py -> validated EndpointConfig objects
+# Usage: load with llm_config.py → validated EndpointConfig objects
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -26,6 +26,30 @@ defaults:
 # Endpoints
 # -----------------------------------------------------------------------------
 endpoints:
+
+  # ---------------------------------------------------------------------------
+  # Anthropic
+  # Source: https://docs.anthropic.com/en/docs/about-claude/pricing
+  # ---------------------------------------------------------------------------
+  anthropic-sonnet:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+    cost:
+      input_per_1m: 3.00
+      output_per_1m: 15.00
+      pricing_url: https://docs.anthropic.com/en/docs/about-claude/pricing
+      pricing_checked: "2026-03-21"
+
+  anthropic-haiku:
+    provider: anthropic
+    model: claude-haiku-4-5-20251001
+    api_key_env: ANTHROPIC_API_KEY
+    cost:
+      input_per_1m: 1.00
+      output_per_1m: 5.00
+      pricing_url: https://docs.anthropic.com/en/docs/about-claude/pricing
+      pricing_checked: "2026-03-21"
 
   # ---------------------------------------------------------------------------
   # OpenAI (direct)
@@ -51,14 +75,199 @@ endpoints:
       pricing_url: https://openai.com/api/pricing/
       pricing_checked: "2026-03-21"
 
-# -----------------------------------------------------------------------------
-# Role assignments: which endpoint serves which function
-# -----------------------------------------------------------------------------
-# Soft mappings, not enforced by the loader.
-# Override per-project via project-level config or environment.
-# -----------------------------------------------------------------------------
-roles:
 
-  default:
-    classification: openai-gpt4o-mini
-    benchmark_baseline: openai-gpt4o
+  # ---------------------------------------------------------------------------
+  # Azure OpenAI
+  # Source: https://azure.microsoft.com/en-us/pricing/details/azure-openai/
+  # ---------------------------------------------------------------------------
+  azure-sea-gpt4o:
+    provider: azure
+    model: gpt-4o
+    api_key_env: AZURE_SEA_API_KEY
+    base_url: https://your-resource-sea.openai.azure.com/openai/v1/
+    region: southeastasia
+    azure_deployment: gpt-4o
+    azure_api_version: "2024-12-01-preview"
+    cost:
+      input_per_1m: 2.50
+      output_per_1m: 10.00
+      pricing_url: https://azure.microsoft.com/en-us/pricing/details/azure-openai/
+      pricing_checked: "2026-03-21"
+      pricing_notes: >
+        Standard (on-demand) pricing shown. Provisioned throughput (PTU)
+        pricing differs. Verify against your Azure portal billing.
+
+  azure-aue-gpt4o-mini:
+    provider: azure
+    model: gpt-4o-mini
+    api_key_env: AZURE_AUE_API_KEY
+    base_url: https://your-resource.openai.azure.com/openai/v1/
+    region: australiaeast
+    azure_deployment: gpt-4o-mini
+    azure_api_version: "2024-12-01-preview"
+    cost:
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+      pricing_url: https://azure.microsoft.com/en-us/pricing/details/azure-openai/
+      pricing_checked: "2026-03-21"
+
+
+  # ---------------------------------------------------------------------------
+  # DeepSeek
+  # Source: https://api-docs.deepseek.com/quick_start/pricing
+  #
+  # api.deepseek.com resolves to mainland China infrastructure (Hangzhou).
+  # There is no separate international endpoint. Accessible globally.
+  #
+  # deepseek-chat and deepseek-reasoner both run DeepSeek-V3.2 with
+  # identical pricing. The difference is the mode:
+  #   deepseek-chat     → non-thinking (max 8K output)
+  #   deepseek-reasoner → thinking with CoT (max 64K output)
+  # ---------------------------------------------------------------------------
+  deepseek-chat:
+    provider: deepseek
+    model: deepseek-chat
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com
+    region: cn-hangzhou
+    cost:
+      input_per_1m: 0.28
+      output_per_1m: 0.42
+      cache_hit_input_per_1m: 0.028
+      pricing_url: https://api-docs.deepseek.com/quick_start/pricing
+      pricing_checked: "2026-03-21"
+    notes: >
+      DeepSeek-V3.2 non-thinking mode. 128K context.
+      OpenAI-compatible API. Mainland China infrastructure,
+      accessible from Singapore.
+
+  deepseek-reasoner:
+    provider: deepseek
+    model: deepseek-reasoner
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com
+    region: cn-hangzhou
+    cost:
+      input_per_1m: 0.28
+      output_per_1m: 0.42
+      cache_hit_input_per_1m: 0.028
+      pricing_url: https://api-docs.deepseek.com/quick_start/pricing
+      pricing_checked: "2026-03-21"
+    notes: >
+      DeepSeek-V3.2 thinking mode (CoT). Same model and pricing
+      as deepseek-chat. Reasoning tokens billed at output rate.
+
+
+  # ---------------------------------------------------------------------------
+  # MiniMax
+  # Source: https://platform.minimax.io/docs/guides/pricing-paygo
+  #
+  # Beijing-based Chinese AI company. api.minimax.io is globally accessible.
+  # OpenAI-compatible API. Also supports Anthropic SDK (recommended by MiniMax).
+  # ---------------------------------------------------------------------------
+  minimax-m2.7:
+    provider: minimax
+    model: MiniMax-M2.7
+    api_key_env: MINIMAX_API_KEY
+    base_url: https://api.minimax.io/v1
+    cost:
+      input_per_1m: 0.30
+      output_per_1m: 1.20
+      cache_hit_input_per_1m: 0.06
+      pricing_url: https://platform.minimax.io/docs/guides/pricing-paygo
+      pricing_checked: "2026-03-21"
+    notes: >
+      Latest MiniMax model. 204K context. OpenAI-compatible API.
+      Supports tool calling and interleaved thinking.
+
+  minimax-m2.5:
+    provider: minimax
+    model: MiniMax-M2.5
+    api_key_env: MINIMAX_API_KEY
+    base_url: https://api.minimax.io/v1
+    cost:
+      input_per_1m: 0.30
+      output_per_1m: 1.20
+      cache_hit_input_per_1m: 0.03
+      pricing_url: https://platform.minimax.io/docs/guides/pricing-paygo
+      pricing_checked: "2026-03-21"
+    notes: >
+      204K context. OpenAI-compatible API. Same pricing as M2.7,
+      slightly cheaper cache reads ($0.03 vs $0.06).
+
+
+  # ---------------------------------------------------------------------------
+  # Qwen (Alibaba Cloud / DashScope)
+  # Source: https://www.alibabacloud.com/help/en/model-studio/model-pricing
+  #
+  # Qwen uses TIERED pricing based on input token count per request.
+  # Rates below are for the lowest tier. See pricing_url for full schedule.
+  #
+  # Alibaba Cloud API keys are region-specific:
+  #   International (Singapore) and Chinese Mainland (Beijing) keys
+  #   are NOT interchangeable. Each requires its own Alibaba Cloud account.
+  # ---------------------------------------------------------------------------
+
+  # International deployment: endpoint and data in Singapore.
+  # Inference scheduled globally (excluding Chinese Mainland).
+  qwen-plus-intl:
+    provider: qwen
+    model: qwen-plus
+    api_key_env: DASHSCOPE_INTL_API_KEY
+    base_url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+    region: ap-southeast-1
+    cost:
+      input_per_1m: 0.40
+      output_per_1m: 1.20
+      pricing_url: https://www.alibabacloud.com/help/en/model-studio/model-pricing
+      pricing_checked: "2026-03-21"
+      pricing_notes: >
+        Non-thinking mode. Tiered: ≤256K shown. 256K-1M: $1.20/$3.60.
+        Thinking mode output: $4.00/1M (≤256K), $12.00/1M (256K-1M).
+    notes: >
+      International endpoint. Data stored in Singapore.
+      Inference compute outside Chinese Mainland.
+
+  # Chinese Mainland deployment: endpoint and data in Beijing.
+  # Inference limited to Chinese Mainland. Requires mainland Alibaba
+  # Cloud account. Network-accessible from Singapore.
+  qwen-plus-cn:
+    provider: qwen
+    model: qwen-plus
+    api_key_env: DASHSCOPE_CN_API_KEY
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    region: cn-beijing
+    cost:
+      input_per_1m: 0.115
+      output_per_1m: 0.287
+      pricing_url: https://www.alibabacloud.com/help/en/model-studio/model-pricing
+      pricing_checked: "2026-03-21"
+      pricing_notes: >
+        Non-thinking mode. Tiered: ≤128K shown.
+        128K-256K: $0.345/$2.868. 256K-1M: $0.689/$6.881.
+        Thinking mode output: $1.147/1M (≤128K).
+    notes: >
+      Chinese Mainland endpoint. Data stored in Beijing.
+      Requires mainland Alibaba Cloud account (separate from
+      international account). Keys are not interchangeable.
+
+  # China (Hong Kong) deployment: endpoint and data in Hong Kong.
+  # Inference limited to Hong Kong. Same pricing as International.
+  qwen-plus-hk:
+    provider: qwen
+    model: qwen-plus
+    api_key_env: DASHSCOPE_HK_API_KEY
+    base_url: https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1
+    region: cn-hongkong
+    cost:
+      input_per_1m: 0.40
+      output_per_1m: 1.20
+      pricing_url: https://www.alibabacloud.com/help/en/model-studio/model-pricing
+      pricing_checked: "2026-03-21"
+      pricing_notes: >
+        Same rates as International deployment.
+        Tiered: ≤256K shown. 256K-1M: $1.20/$3.60.
+    notes: >
+      Hong Kong endpoint. Data and inference in Hong Kong.
+      Useful as a lower-latency alternative to International
+      when accessing from within China or nearby regions.
