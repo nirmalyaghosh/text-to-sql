@@ -11,6 +11,7 @@ Responsibilities:
 
 import re
 import time
+
 from typing import (
     Any,
     Dict,
@@ -62,7 +63,7 @@ class SecurityGovernanceAgent(BaseAgent):
         query_lower = query.lower()
 
         # Complex joins increase risk (potential for unintended data exposure)
-        join_count = query.count("JOIN")
+        join_count = query_lower.count("join")
         risk_score += join_count * 0.05
 
         # Aggregates are generally safe
@@ -77,6 +78,62 @@ class SecurityGovernanceAgent(BaseAgent):
             risk_score += 0.1
 
         return max(0.0, min(1.0, risk_score))
+
+    def _build_allowed_result(
+        self,
+        query: str,
+        step_start: float,
+    ) -> Dict[str, Any]:
+        """
+        Helper function used to build the success
+        result after all security checks pass.
+        """
+        duration_ms = (
+            (time.time() - step_start) * 1000
+        )
+        logger.info("Security checks passed")
+        return {
+            "allowed": True,
+            "refined_query": query,
+            "execution_step": self.create_execution_step(
+                action="security_validation_passed",
+                input_data={"query": query},
+                output_data={},
+                duration_ms=duration_ms,
+            ),
+        }
+
+    def _build_security_error(
+        self,
+        previous_results: Dict[str, Any],
+        error: str,
+        step_start: float,
+    ) -> Dict[str, Any]:
+        """
+        Helper function used to build the result
+        for unexpected errors during security checks.
+        """
+        duration_ms = (
+            (time.time() - step_start) * 1000
+        )
+        query = (
+            previous_results
+            .get("refinement", {})
+            .get("refined_query", "")
+        )
+        return {
+            "allowed": False,
+            "veto_reason": f"Security check failed: {error}",
+            "execution_step": self.create_execution_step(
+                action="security_check_error",
+                input_data={"query": query},
+                output_data={"error": error},
+                veto_reason=(
+                    "Internal security check error"
+                ),
+                duration_ms=duration_ms,
+            ),
+        }
 
     def _can_access_pii(self, role: str) -> bool:
         """
@@ -115,6 +172,40 @@ class SecurityGovernanceAgent(BaseAgent):
 
         return {"allowed": True}
 
+    async def _check_pii_gate(
+        self,
+        query: str,
+        user_role: str,
+        step_start: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Helper function used to check PII access and
+        return a veto if the user role is not
+        authorized. Returns None if passed.
+        """
+        pii_check = await self._detect_pii_access(query)
+        if not pii_check.get("found_pii"):
+            return None
+        if self._can_access_pii(user_role):
+            return None
+
+        pii_str = ", ".join(pii_check["pii_tables"])
+        reason = (
+            f"Query attempts to access PII "
+            f"({pii_str}). Role '{user_role}' "
+            f"not authorized."
+        )
+        return self._veto(
+            action="pii_access_blocked",
+            query=query,
+            reason=reason,
+            output_data={
+                "pii_tables": pii_check.get("pii_tables", [])
+            },
+            veto_reason="Unauthorized PII access",
+            step_start=step_start,
+        )
+
     async def _check_query_safety(self, query: str) -> Dict[str, Any]:
         """
         Helper function used to ensure the query is
@@ -144,6 +235,36 @@ class SecurityGovernanceAgent(BaseAgent):
                 }
 
         return {"safe": True}
+
+    async def _check_risk_gate(
+        self,
+        query: str,
+        step_start: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Helper function used to check risk score and
+        return a veto if it exceeds the threshold.
+        Returns None if passed.
+        """
+        risk_score = await self._assess_risk(query)
+        threshold = self.policies.get("risk_threshold", 0.7)
+        if risk_score <= threshold:
+            return None
+
+        reason = (
+            f"Risk score {risk_score:.2f} exceeds "
+            f"threshold {threshold}"
+        )
+        result = self._veto(
+            action="risk_assessment_blocked",
+            query=query,
+            reason=reason,
+            output_data={"risk_score": risk_score},
+            veto_reason=f"High risk: {risk_score:.2f}",
+            step_start=step_start,
+        )
+        result["requires_approval"] = True
+        return result
 
     async def _detect_pii_access(self, query: str) -> Dict[str, Any]:
         """
@@ -181,30 +302,15 @@ class SecurityGovernanceAgent(BaseAgent):
                     detected_pii.append(pii_type)
                     break
 
-        # Map detected PII to tables
+        # Map detected PII to tables via
+        # self.pii_patterns (table -> PII types)
         if detected_pii:
-            # Determine which tables would contain this PII
-            customer_pii = [
-                "email", "phone", "address", "credit_card"
-            ]
-            employee_pii = [
-                "ssn", "salary", "dob", "address"
-            ]
-
-            if any(pii in customer_pii for pii in detected_pii):
-                if (
-                    "customer" in query_lower
-                    or "customers" in query_lower
-                ):
-                    pii_tables.append("customers")
-                    pii_columns.extend(detected_pii)
-
-            if any(pii in employee_pii for pii in detected_pii):
-                if (
-                    "employee" in query_lower
-                    or "employees" in query_lower
-                ):
-                    pii_tables.append("employees")
+            for tbl, cols in self.pii_patterns.items():
+                if not any(p in cols for p in detected_pii):
+                    continue
+                stem = tbl.rstrip("s")
+                if stem in query_lower or tbl in query_lower:
+                    pii_tables.append(tbl)
                     pii_columns.extend(detected_pii)
 
             # If PII fields detected but table context unclear,
@@ -256,10 +362,12 @@ class SecurityGovernanceAgent(BaseAgent):
             if not access.get("allowed"):
                 reason = access.get("reason")
                 return self._veto(
-                    "access_control_check_blocked",
-                    refined_query, reason,
-                    {"reason": reason},
-                    reason, step_start,
+                    action="access_control_check_blocked",
+                    query=refined_query,
+                    reason=reason,
+                    output_data={"reason": reason},
+                    veto_reason=reason,
+                    step_start=step_start,
                 )
 
             safety = await self._check_query_safety(
@@ -268,10 +376,12 @@ class SecurityGovernanceAgent(BaseAgent):
             if not safety.get("safe"):
                 reason = safety.get("reason")
                 return self._veto(
-                    "safety_check_blocked",
-                    refined_query, reason,
-                    {"reason": reason},
-                    reason, step_start,
+                    action="safety_check_blocked",
+                    query=refined_query,
+                    reason=reason,
+                    output_data={"reason": reason},
+                    veto_reason=reason,
+                    step_start=step_start,
                 )
 
             pii_veto = await self._check_pii_gate(
@@ -298,6 +408,32 @@ class SecurityGovernanceAgent(BaseAgent):
                 previous_results, str(e), step_start
             )
 
+    def _load_pii_patterns(self) -> Dict[str, list]:
+        """
+        Helper function used to load PII patterns
+        per table.
+        """
+        return {
+            "customers": [
+                "email", "phone", "address",
+                "ssn", "credit_card",
+            ],
+            "employees": [
+                "ssn", "salary", "dob", "address",
+            ],
+        }
+
+    def _load_security_policies(self) -> Dict[str, Any]:
+        """
+        Helper function used to load security policies.
+        """
+        return {
+            "risk_threshold": 0.7,
+            "require_approval_above_risk": 0.7,
+            "allowed_read_only": True,
+            "pii_masking_enabled": True,
+        }
+
     def _veto(
         self,
         action: str,
@@ -308,7 +444,8 @@ class SecurityGovernanceAgent(BaseAgent):
         step_start: float,
     ) -> Dict[str, Any]:
         """
-        Build a standard security veto response.
+        Helper function used to build a standard
+        security veto response.
         """
         duration_ms = (
             (time.time() - step_start) * 1000
@@ -323,139 +460,4 @@ class SecurityGovernanceAgent(BaseAgent):
                 veto_reason=veto_reason,
                 duration_ms=duration_ms,
             ),
-        }
-
-    async def _check_pii_gate(
-        self,
-        query: str,
-        user_role: str,
-        step_start: float,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Check PII access and return a veto if the user
-        role is not authorized. Returns None if passed.
-        """
-        pii_check = await self._detect_pii_access(query)
-        if not pii_check.get("found_pii"):
-            return None
-        if self._can_access_pii(user_role):
-            return None
-
-        pii_str = ", ".join(pii_check["pii_tables"])
-        reason = (
-            f"Query attempts to access PII "
-            f"({pii_str}). Role '{user_role}' "
-            f"not authorized."
-        )
-        return self._veto(
-            "pii_access_blocked", query, reason,
-            {"pii_tables": pii_check.get(
-                "pii_tables", []
-            )},
-            "Unauthorized PII access", step_start,
-        )
-
-    async def _check_risk_gate(
-        self,
-        query: str,
-        step_start: float,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Check risk score and return a veto if it exceeds
-        the threshold. Returns None if passed.
-        """
-        risk_score = await self._assess_risk(query)
-        threshold = self.policies.get(
-            "risk_threshold", 0.7
-        )
-        if risk_score <= threshold:
-            return None
-
-        reason = (
-            f"Risk score {risk_score:.2f} exceeds "
-            f"threshold {threshold}"
-        )
-        result = self._veto(
-            "risk_assessment_blocked", query, reason,
-            {"risk_score": risk_score},
-            f"High risk: {risk_score:.2f}", step_start,
-        )
-        result["requires_approval"] = True
-        return result
-
-    def _build_allowed_result(
-        self,
-        query: str,
-        step_start: float,
-    ) -> Dict[str, Any]:
-        """
-        Build the success result after all security
-        checks pass.
-        """
-        duration_ms = (
-            (time.time() - step_start) * 1000
-        )
-        logger.info("Security checks passed")
-        return {
-            "allowed": True,
-            "refined_query": query,
-            "execution_step": self.create_execution_step(
-                action="security_validation_passed",
-                input_data={"query": query},
-                output_data={},
-                duration_ms=duration_ms,
-            ),
-        }
-
-    def _build_security_error(
-        self,
-        previous_results: Dict[str, Any],
-        error: str,
-        step_start: float,
-    ) -> Dict[str, Any]:
-        """
-        Build result for unexpected errors during
-        security checks.
-        """
-        duration_ms = (
-            (time.time() - step_start) * 1000
-        )
-        refinement = previous_results.get(
-            "refinement", {}
-        )
-        return {
-            "allowed": False,
-            "veto_reason": (
-                f"Security check failed: {error}"
-            ),
-            "execution_step": self.create_execution_step(
-                action="security_check_error",
-                input_data={"query": refinement},
-                output_data={"error": error},
-                veto_reason=(
-                    "Internal security check error"
-                ),
-                duration_ms=duration_ms,
-            ),
-        }
-
-    def _load_pii_patterns(self) -> Dict[str, list]:
-        """
-        Helper function used to load PII patterns
-        (hardcoded).
-        """
-        return {
-            "customers": ["email", "phone", "address", "ssn"],
-            "employees": ["ssn", "salary", "dob", "address"],
-        }
-
-    def _load_security_policies(self) -> Dict[str, Any]:
-        """
-        Helper function used to load security policies.
-        """
-        return {
-            "risk_threshold": 0.7,
-            "require_approval_above_risk": 0.7,
-            "allowed_read_only": True,
-            "pii_masking_enabled": True,
         }
