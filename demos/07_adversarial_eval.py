@@ -77,6 +77,24 @@ def _build_pipeline(
     return orchestrator
 
 
+def _classify_fp(
+    expected: str,
+    actual: str,
+) -> str:
+    """
+    Helper function used to classify a golden
+    query result as OK, FALSE POSITIVE,
+    CORRECT BLOCK, or MISSED BLOCK.
+    """
+    if expected == "allowed":
+        if actual == "blocked":
+            return "FALSE POSITIVE"
+        return "OK"
+    if actual == "blocked":
+        return "CORRECT BLOCK"
+    return "MISSED BLOCK"
+
+
 def _load_queries() -> list[dict]:
     """
     Helper function used to load adversarial queries
@@ -394,6 +412,121 @@ async def run_adversarial_eval(
     logger.info("")
 
 
+async def run_golden_fp_check(
+    extended_pii: bool = False,
+) -> None:
+    """
+    Run golden queries through the pipeline
+    to measure false positive rate. Queries
+    with expected_outcome="allowed" that get
+    blocked are false positives.
+    """
+    pii_label = "ON" if extended_pii else "OFF"
+    logger.info("")
+    _log_divider()
+    logger.info("  Golden Query FP Check")
+    logger.info(f"  extended_pii: {pii_label}")
+    _log_divider()
+
+    run_id = generate_run_id()
+    path = EVALS_DIR / "golden_queries.json"
+    with open(path, "r", encoding="utf-8") as f:
+        golden = json.load(f)
+
+    logger.info(
+        f"  Run ID: {run_id}, "
+        f"{len(golden)} golden queries"
+    )
+    logger.info("")
+
+    results = []
+    for gq in golden:
+        logger.info(
+            f"  Running {gq['id']}: "
+            f"{gq['nl_query'][:50]}..."
+        )
+        try:
+            orchestrator = _build_pipeline(
+                extended_pii=extended_pii,
+            )
+            result = await _run_query(
+                orchestrator=orchestrator,
+                query=gq,
+                run_id=run_id,
+                extended_pii=extended_pii,
+            )
+            fp_label = _classify_fp(
+                expected=gq["expected_outcome"],
+                actual=result["actual_outcome"],
+            )
+            result["fp_label"] = fp_label
+
+            logger.info(
+                f"  {gq['id']}"
+                f" | exp="
+                f"{gq['expected_outcome']:<18s}"
+                f" | act="
+                f"{result['actual_outcome']:<7s}"
+                f" | {fp_label}"
+            )
+            if result.get("veto_reason"):
+                logger.info(
+                    f"    Veto:"
+                    f" {result['veto_reason'][:70]}"
+                )
+            results.append(result)
+
+        except Exception as e:
+            logger.error(
+                f"  {gq['id']} FAILED: {e}"
+            )
+            results.append({
+                "run_id": run_id,
+                "id": gq["id"],
+                "nl_query": gq["nl_query"],
+                "expected_outcome": (
+                    gq["expected_outcome"]
+                ),
+                "actual_outcome": "error",
+                "fp_label": "ERROR",
+                "error": str(e),
+            })
+        logger.info("")
+
+    # Summary
+    _log_divider()
+    logger.info(
+        "  GOLDEN QUERY FP CHECK SUMMARY"
+    )
+    _log_divider()
+    allowed_count = sum(
+        1 for gq in golden
+        if gq["expected_outcome"] == "allowed"
+    )
+    fp = sum(
+        1 for r in results
+        if r.get("fp_label") == "FALSE POSITIVE"
+    )
+    logger.info(
+        f"  Legitimate queries:"
+        f" {allowed_count}"
+    )
+    logger.info(
+        f"  False positives: {fp}"
+    )
+    if allowed_count > 0:
+        logger.info(
+            f"  FP rate:"
+            f" {fp / allowed_count:.1%}"
+            f" ({fp}/{allowed_count})"
+        )
+    logger.info("")
+
+    out = _save_results(results=results)
+    logger.info(f"  Results saved to {out}")
+    logger.info("")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -401,13 +534,28 @@ if __name__ == "__main__":
         action="store_true",
         help="Enable extended PII patterns",
     )
+    parser.add_argument(
+        "--golden-fp",
+        action="store_true",
+        help="Run golden query FP check instead of adversarial eval",
+    )
     args = parser.parse_args()
 
     setup_logging()
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    load_dotenv()
-    asyncio.run(
-        run_adversarial_eval(
-            extended_pii=args.extended_pii,
-        )
+    logging.getLogger("httpx").setLevel(
+        logging.WARNING
     )
+    load_dotenv()
+
+    if args.golden_fp:
+        asyncio.run(
+            run_golden_fp_check(
+                extended_pii=args.extended_pii,
+            )
+        )
+    else:
+        asyncio.run(
+            run_adversarial_eval(
+                extended_pii=args.extended_pii,
+            )
+        )
