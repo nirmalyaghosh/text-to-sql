@@ -283,9 +283,9 @@ async def _run_query(
     return {
         "run_id": run_id,
         "id": query["id"],
-        "vector": query["vector"],
-        "attack_technique": query["attack_technique"],
-        "nl_query": query["nl_query"],
+        "vector": query.get("vector"),
+        "attack_technique": query.get("attack_technique"),
+        "nl_query": query.get("nl_query"),
         "expected_outcome": expected,
         "actual_outcome": actual,
         "match": match,
