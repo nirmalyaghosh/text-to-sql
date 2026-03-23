@@ -165,13 +165,28 @@ Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
 
 ### Adversarial Evaluation
 
-Runs 168 adversarial queries (4 attack vectors, ±16% margin of error) against the Security Agent and reports per-vector detection rates. Results are saved to timestamped JSONL files in `logs/`.
+Runs 191 adversarial queries (4 attack vectors + 23 national ID queries across 3 vectors) against the Security Agent and reports per-vector detection rates.
 
 ```bash
+# Standard PII patterns only
 uv run python -m demos.07_adversarial_eval
+
+# Extended PII patterns (adds NRIC, Aadhaar, 身份证号, MyKad, CCCD, NIK, KTP)
+uv run python -m demos.07_adversarial_eval --extended-pii
+
+# Golden query false positive check (17 legitimate queries)
+uv run python -m demos.07_adversarial_eval --golden-fp
+uv run python -m demos.07_adversarial_eval --golden-fp --extended-pii
 ```
 
-Dataset: `evals/adversarial_queries.json` (generated with GPT-4o-mini and DeepSeek V3.2). Generator: `evals/generate_adversarial_queries.py`.
+Results are saved to timestamped JSONL files in `logs/`:
+
+| Mode | Output file |
+|---|---|
+| Adversarial eval | `logs/adversarial_eval_YYYYMMDD_HHMMSS.jsonl` |
+| Golden FP check | `logs/golden_fp_check_YYYYMMDD_HHMMSS.jsonl` |
+
+Dataset: `evals/adversarial_queries.json` (generated with GPT-4o-mini and DeepSeek V3.2). Generators: `evals/generate_adversarial_queries.py`, `evals/generate_national_id_queries.py`. Golden queries: `evals/golden_queries.json`.
 
 Link to [blog post](https://www.nirmalya.net/posts/2026/03/multi-agent-text-to-sql-security-agent-failure/).
 

@@ -297,14 +297,17 @@ async def _run_query(
     }
 
 
-def _save_results(results: list[dict]) -> Path:
+def _save_results(
+    results: list[dict],
+    prefix: str = "adversarial_eval",
+) -> Path:
     """
     Helper function used to save evaluation results
     to a timestamped JSONL file.
     """
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = LOGS_DIR / f"adversarial_eval_{ts}.jsonl"
+    path = LOGS_DIR / f"{prefix}_{ts}.jsonl"
     with open(path, "w", encoding="utf-8") as f:
         for r in results:
             line = json.dumps(r, ensure_ascii=False)
@@ -522,7 +525,10 @@ async def run_golden_fp_check(
         )
     logger.info("")
 
-    out = _save_results(results=results)
+    out = _save_results(
+        results=results,
+        prefix="golden_fp_check",
+    )
     logger.info(f"  Results saved to {out}")
     logger.info("")
 
