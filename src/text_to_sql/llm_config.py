@@ -72,6 +72,7 @@ ProviderName = Literal[
     "deepseek",
     "minimax",
     "openai",
+    "openrouter",
     "qwen",
 ]
 
@@ -321,8 +322,8 @@ def get_client(
             max_retries=ep.max_retries,
         )
 
-    # openai, deepseek, minimax, qwen
-    # -> all OpenAI-compatible
+    # openai, deepseek, minimax, openrouter,
+    # qwen -> all OpenAI-compatible
     from openai import OpenAI
     kwargs: dict[str, Any] = {
         "api_key": ep.api_key,

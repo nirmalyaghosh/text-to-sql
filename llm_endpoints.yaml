@@ -271,3 +271,38 @@ endpoints:
       Hong Kong endpoint. Data and inference in Hong Kong.
       Useful as a lower-latency alternative to International
       when accessing from within China or nearby regions.
+
+
+  # ---------------------------------------------------------------------------
+  # OpenRouter
+  # Source: https://openrouter.ai/models
+  #
+  # OpenRouter proxies multiple providers via a single OpenAI-compatible API.
+  # Useful when a model is not available locally (e.g. no GPU for Ollama).
+  # ---------------------------------------------------------------------------
+  openrouter-qwen3.5-9b:
+    provider: openrouter
+    model: qwen/qwen3.5-9b
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.05
+      output_per_1m: 0.15
+      pricing_url: https://openrouter.ai/models/qwen/qwen3.5-9b
+      pricing_checked: "2026-03-30"
+    notes: >
+      Qwen 3.5 9B via OpenRouter. Fallback for semantic output
+      audit when Ollama is not available. Smallest Qwen 3.5
+      model on OpenRouter (4B not hosted).
+
+# -----------------------------------------------------------------------------
+# Roles: map logical roles to endpoint names
+#
+# semantic_audit: compares generated SQL columns against the user's request.
+#   Default: openrouter-qwen3.5-9b (API, ~$0.05/1M input)
+#   To change: replace the endpoint name below with any endpoint above
+#   that supports chat completions.
+# -----------------------------------------------------------------------------
+roles:
+  default:
+    semantic_audit: openai-gpt4o-mini

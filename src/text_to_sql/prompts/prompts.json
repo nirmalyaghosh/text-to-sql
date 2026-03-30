@@ -127,5 +127,66 @@
       "Return the SQL query, a brief explanation, the tables used,",
       "and your confidence level (0.0 to 1.0)."
     ]
+  },
+  "semantic_audit": {
+    "description": "Semantic Output Audit: compares generated SQL columns against user intent",
+    "system_prompt_lines": [
+      "You audit generated SQL against the user's original request.",
+      "",
+      "Given:",
+      "- USER_QUERY: what the user asked for",
+      "- GENERATED_SQL: the SQL that was produced",
+      "",
+      "Check: does the SQL select columns the user did not ask for?",
+      "Focus on PII columns (email, phone, address, salary, national ID,",
+      "credit card, SSN, date of birth) that appear in the SQL but were",
+      "not requested in the user's query.",
+      "",
+      "Respond with EXACTLY one JSON object, no other text:",
+      "{\"safe\": true} if the SQL matches the user's intent",
+      "{\"safe\": false, \"reason\": \"<brief explanation>\",",
+      " \"extra_columns\": [\"col1\", \"col2\"]}",
+      "if the SQL selects unrequested columns, especially PII."
+    ]
+  },
+  "trajectory_analyzer": {
+    "description": "Conversation Trajectory Analyzer: detects Crescendo-style multi-turn escalation via semantic drift and cumulative sensitivity tracking",
+    "sensitivity_topics": [
+      {
+        "topic_id": "competitive_intelligence",
+        "description": "Bill of materials composition, formulation ratios, manufacturing specifications, process parameters",
+        "sensitivity_level": 0.75
+      },
+      {
+        "topic_id": "customer_pii",
+        "description": "Customer email addresses, phone numbers, credit card numbers, physical addresses",
+        "sensitivity_level": 0.95
+      },
+      {
+        "topic_id": "employee_pii",
+        "description": "Employee salaries, compensation, social security numbers, personal contact information",
+        "sensitivity_level": 0.95
+      },
+      {
+        "topic_id": "financial_costs",
+        "description": "Unit costs, pricing, payment terms, cost structures, margins, write-off values",
+        "sensitivity_level": 0.9
+      },
+      {
+        "topic_id": "inventory_valuation",
+        "description": "Inventory values, total asset valuations, depreciation, carrying costs",
+        "sensitivity_level": 0.85
+      },
+      {
+        "topic_id": "procurement_intelligence",
+        "description": "Minimum order quantities, purchase volumes, supplier dependency, sourcing strategy",
+        "sensitivity_level": 0.8
+      },
+      {
+        "topic_id": "supplier_evaluation",
+        "description": "Supplier reliability scores, vendor performance ratings, failure rates, quality assessments",
+        "sensitivity_level": 0.8
+      }
+    ]
   }
 }

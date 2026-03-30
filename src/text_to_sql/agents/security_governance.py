@@ -9,6 +9,7 @@ Responsibilities:
 - Risk assessment scoring
 """
 
+import json
 import re
 import time
 
@@ -21,7 +22,13 @@ from typing import (
 from text_to_sql.agents.base import BaseAgent
 from text_to_sql.agents.types import QueryRequest
 from text_to_sql.app_logger import get_logger
+from text_to_sql.llm_config import (
+    get_client,
+    get_model_name,
+    load_config,
+)
 from text_to_sql.prompts.prompts import get_prompt
+from text_to_sql.usage_tracker import log_llm_response
 
 
 logger = get_logger(__name__)
@@ -83,6 +90,100 @@ class SecurityGovernanceAgent(BaseAgent):
             risk_score += 0.1
 
         return max(0.0, min(1.0, risk_score))
+
+    async def audit_semantic_intent(
+        self,
+        nl_query: str,
+        generated_sql: str,
+    ) -> Dict[str, Any]:
+        """
+        Semantic output audit: compare generated SQL
+        columns against the user's original request
+        using a small LLM. Flags unrequested columns,
+        especially PII.
+
+        Args:
+            nl_query: The user's natural language query
+            generated_sql: The SQL that was produced
+
+        Returns:
+            {'safe': bool, 'reason': str}
+        """
+        try:
+            config = load_config()
+            eps = config.get_role_endpoints(
+                project="default",
+                role="semantic_audit",
+            )
+            if not eps:
+                logger.warning("No semantic_audit endpoint configured, skipping")
+                return {"safe": True}
+            ep = eps[0]
+            logger.info("Semantic audit: %s via %s", ep.model, ep.provider)
+
+            client = get_client(endpoint_name=ep.name, config=config)
+            model = get_model_name(endpoint_name=ep.name, config=config)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": get_prompt("semantic_audit")},
+                    {"role": "user", "content": (
+                        f"/no_think\nUSER_QUERY: {nl_query}\n\n"
+                        f"GENERATED_SQL: {generated_sql}"
+                    )},
+                ],
+                temperature=0.0,
+                max_tokens=200,
+            )
+
+            u = response.usage
+            if u:
+                log_llm_response(
+                    request_id="semantic_audit",
+                    model=model,
+                    question=nl_query[:200],
+                    usage={
+                        "prompt_tokens": u.prompt_tokens,
+                        "completion_tokens": u.completion_tokens,
+                        "total_tokens": u.total_tokens,
+                    },
+                    generated_sql=generated_sql[:200],
+                    purpose="semantic_audit",
+                )
+
+            return self._parse_audit_response(
+                response.choices[0].message.content.strip()
+            )
+
+        except json.JSONDecodeError as e:
+            logger.warning("Semantic audit: invalid JSON: %s", e)
+            return {"safe": True}
+        except Exception as e:
+            logger.warning("Semantic audit unavailable: %s", e)
+            return {"safe": True}
+
+    def _parse_audit_response(
+        self,
+        content: str,
+    ) -> Dict[str, Any]:
+        """
+        Helper function used to parse the JSON
+        response from the semantic audit LLM.
+        """
+        if content.startswith("```"):
+            content = content.split("\n", 1)[-1]
+            content = content.rsplit("```", 1)[0].strip()
+
+        result = json.loads(content)
+        if result.get("safe", True):
+            return {"safe": True}
+
+        reason = result.get("reason", "Unrequested columns in SQL")
+        extra = result.get("extra_columns", [])
+        if extra:
+            reason = f"{reason} (columns: {', '.join(extra)})"
+        logger.warning("Semantic audit flagged: %s", reason)
+        return {"safe": False, "reason": reason}
 
     async def audit_generated_sql(
         self,
