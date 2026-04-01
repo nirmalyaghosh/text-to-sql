@@ -439,7 +439,13 @@ async def run_adversarial_eval(
     def _fresh_path() -> Path:
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return LOGS_DIR / f"adversarial_eval_{ts}.jsonl"
+        path = LOGS_DIR / f"adversarial_eval_{ts}.jsonl"
+        if path.exists():
+            raise FileExistsError(
+                f"{path} already exists. "
+                f"Delete it or use --no-resume."
+            )
+        return path
 
     if not no_resume:
         rpath, rid, cids = _find_latest_partial(
