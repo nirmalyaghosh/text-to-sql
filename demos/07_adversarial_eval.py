@@ -5,8 +5,17 @@ Runs adversarial queries from evals/adversarial_queries.json
 through the full 5-agent pipeline and records whether the
 Security Agent blocks or allows each attack.
 
+Features:
+    - Incremental JSONL write (each result appended
+      immediately, survives crashes/power loss)
+    - Auto-resume (detects latest partial JSONL,
+      skips completed queries; --no-resume to disable)
+    - Per-query timeout (--query-timeout, default 600s)
+
 Usage:
     uv run python -m demos.07_adversarial_eval
+    uv run python -m demos.07_adversarial_eval --no-resume
+    uv run python -m demos.07_adversarial_eval --query-timeout 300
 """
 
 import argparse
@@ -38,6 +47,21 @@ logger = get_logger(__name__)
 
 EVALS_DIR = Path(__file__).parent.parent / "evals"
 LOGS_DIR = Path(__file__).parent.parent / "logs"
+
+
+def _append_result(
+    path: Path,
+    result: dict,
+) -> None:
+    """
+    Helper function used to append a single result
+    to a JSONL file.
+    """
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(
+            json.dumps(result, ensure_ascii=False)
+            + "\n"
+        )
 
 
 def _build_pipeline(
@@ -93,6 +117,67 @@ def _classify_fp(
     if actual == "blocked":
         return "CORRECT BLOCK"
     return "MISSED BLOCK"
+
+
+def _error_result(
+    run_id: str,
+    query: dict,
+    outcome: str,
+    error: str | None = None,
+) -> dict:
+    """
+    Helper function used to build a result dict
+    for skipped, timeout, or error outcomes.
+    """
+    r = {
+        "run_id": run_id,
+        "id": query["id"],
+        "vector": query["vector"],
+        "attack_technique": query["attack_technique"],
+        "nl_query": query.get("nl_query"),
+        "expected_outcome": query["expected_outcome"],
+        "actual_outcome": outcome,
+        "match": None,
+        "veto_reason": None,
+        "blocking_check": None,
+        "generated_sql": None,
+        "success": None if outcome == "skipped" else False,
+        "confidence": None,
+    }
+    if error:
+        r["error"] = error
+    if outcome == "skipped":
+        r["skip_reason"] = "requires schema modification"
+    return r
+
+
+def _find_latest_partial(
+    prefix: str,
+    expected_count: int,
+) -> tuple[Path | None, str | None, set[str]]:
+    """
+    Helper function used to find the latest partial
+    JSONL in logs/ for auto-resume. Returns
+    (path, run_id, completed_ids) or
+    (None, None, set()) if no resumable file found.
+    """
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    candidates = sorted(
+        LOGS_DIR.glob(f"{prefix}_*.jsonl"),
+        reverse=True,
+    )
+    for path in candidates:
+        ids = set()
+        run_id = None
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                r = json.loads(line)
+                ids.add(r["id"])
+                if run_id is None:
+                    run_id = r.get("run_id")
+        if len(ids) < expected_count:
+            return path, run_id, ids
+    return None, None, set()
 
 
 def _load_queries() -> list[dict]:
@@ -303,7 +388,8 @@ def _save_results(
 ) -> Path:
     """
     Helper function used to save evaluation results
-    to a timestamped JSONL file.
+    to a timestamped JSONL file. Used by golden FP
+    check (which does not need incremental write).
     """
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -317,11 +403,22 @@ def _save_results(
 
 async def run_adversarial_eval(
     extended_pii: bool = False,
+    query_timeout: int = 600,
+    no_resume: bool = False,
 ) -> None:
     """
     Run adversarial queries from
     evals/adversarial_queries.json through the
     5-agent pipeline and report detection results.
+
+    Results append to JSONL after each query.
+    Auto-resumes from the latest partial JSONL
+    unless no_resume is True.
+
+    Args:
+        extended_pii: Enable extended PII patterns
+        query_timeout: Per-query timeout in seconds
+        no_resume: Force a fresh run
     """
     pii_label = "ON" if extended_pii else "OFF"
     logger.info("")
@@ -329,89 +426,123 @@ async def run_adversarial_eval(
     logger.info("  Adversarial Evaluation")
     logger.info("  Security Agent Detection Test")
     logger.info(f"  extended_pii: {pii_label}")
+    logger.info(
+        f"  query_timeout: {query_timeout}s"
+    )
     _log_divider()
 
-    run_id = generate_run_id()
     queries = _load_queries()
+    completed_ids: set[str] = set()
+    results_path: Path
+    run_id: str
+
+    def _fresh_path() -> Path:
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return LOGS_DIR / f"adversarial_eval_{ts}.jsonl"
+
+    if not no_resume:
+        rpath, rid, cids = _find_latest_partial(
+            prefix="adversarial_eval",
+            expected_count=len(queries),
+        )
+        if rpath and rid and cids:
+            results_path = rpath
+            run_id = rid
+            completed_ids = cids
+            logger.info(
+                f"  Resuming run {run_id} "
+                f"from {results_path.name} "
+                f"({len(completed_ids)} done)"
+            )
+        else:
+            run_id = generate_run_id()
+            results_path = _fresh_path()
+    else:
+        run_id = generate_run_id()
+        results_path = _fresh_path()
+
     logger.info(
         f"  Run ID: {run_id}, "
         f"{len(queries)} adversarial queries"
     )
+    logger.info(f"  Output: {results_path}")
     logger.info("")
 
-    results = []
+    all_results = []
     skipped = 0
 
     for query in queries:
+        qid = query["id"]
+
+        if qid in completed_ids:
+            continue
+
         if query.get("requires_schema_modification"):
             logger.info(
-                f"  SKIP {query['id']}: "
+                f"  SKIP {qid}: "
                 f"requires schema modification"
             )
             skipped += 1
-            results.append({
-                "run_id": run_id,
-                "id": query["id"],
-                "vector": query["vector"],
-                "attack_technique": query["attack_technique"],
-                "nl_query": query.get("nl_query"),
-                "expected_outcome": query["expected_outcome"],
-                "actual_outcome": "skipped",
-                "match": None,
-                "veto_reason": None,
-                "blocking_check": None,
-                "generated_sql": None,
-                "success": None,
-                "confidence": None,
-                "skip_reason": "requires schema modification",
-            })
+            result = _error_result(
+                run_id=run_id,
+                query=query,
+                outcome="skipped",
+            )
+            _append_result(
+                path=results_path, result=result,
+            )
+            all_results.append(result)
             continue
 
         logger.info(
-            f"  Running {query['id']}: "
+            f"  Running {qid}: "
             f"{query['description']}..."
         )
         try:
             orchestrator = _build_pipeline(
                 extended_pii=extended_pii,
             )
-            result = await _run_query(
-                orchestrator=orchestrator,
-                query=query,
-                run_id=run_id,
-                extended_pii=extended_pii,
+            result = await asyncio.wait_for(
+                _run_query(
+                    orchestrator=orchestrator,
+                    query=query,
+                    run_id=run_id,
+                    extended_pii=extended_pii,
+                ),
+                timeout=query_timeout,
             )
-            results.append(result)
             _log_result(result=result)
-        except Exception as e:
-            logger.error(
-                f"  {query['id']} FAILED: {e}"
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"  {qid} TIMEOUT "
+                f"after {query_timeout}s"
             )
-            results.append({
-                "run_id": run_id,
-                "id": query["id"],
-                "vector": query["vector"],
-                "attack_technique": query["attack_technique"],
-                "nl_query": query.get("nl_query"),
-                "expected_outcome": query["expected_outcome"],
-                "actual_outcome": "error",
-                "match": None,
-                "veto_reason": None,
-                "blocking_check": None,
-                "generated_sql": None,
-                "success": False,
-                "confidence": None,
-                "error": str(e),
-            })
+            result = _error_result(
+                run_id=run_id,
+                query=query,
+                outcome="timeout",
+                error=f"timeout after {query_timeout}s",
+            )
+        except Exception as e:
+            logger.error(f"  {qid} FAILED: {e}")
+            result = _error_result(
+                run_id=run_id,
+                query=query,
+                outcome="error",
+                error=str(e),
+            )
+        _append_result(
+            path=results_path, result=result,
+        )
+        all_results.append(result)
         logger.info("")
 
     _log_summary(
-        results=results,
+        results=all_results,
         skipped=skipped,
     )
-
-    path = _save_results(results=results)
-    logger.info(f"  Results saved to {path}")
+    logger.info(f"  Results saved to {results_path}")
     logger.info("")
 
 
@@ -543,7 +674,21 @@ if __name__ == "__main__":
     parser.add_argument(
         "--golden-fp",
         action="store_true",
-        help="Run golden query FP check instead of adversarial eval",
+        help=(
+            "Run golden query FP check "
+            "instead of adversarial eval"
+        ),
+    )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Force a fresh run (skip auto-resume)",
+    )
+    parser.add_argument(
+        "--query-timeout",
+        type=int,
+        default=600,
+        help="Per-query timeout in seconds (default 600)",
     )
     args = parser.parse_args()
 
@@ -563,5 +708,7 @@ if __name__ == "__main__":
         asyncio.run(
             run_adversarial_eval(
                 extended_pii=args.extended_pii,
+                no_resume=args.no_resume,
+                query_timeout=args.query_timeout,
             )
         )

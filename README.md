@@ -177,6 +177,12 @@ uv run python -m demos.07_adversarial_eval --extended-pii
 # Golden query false positive check (17 legitimate queries)
 uv run python -m demos.07_adversarial_eval --golden-fp
 uv run python -m demos.07_adversarial_eval --golden-fp --extended-pii
+
+# Force fresh run (skip auto-resume)
+uv run python -m demos.07_adversarial_eval --no-resume
+
+# Custom per-query timeout (default 600s)
+uv run python -m demos.07_adversarial_eval --query-timeout 300
 ```
 
 Results are saved to timestamped JSONL files in `logs/`:
@@ -185,6 +191,14 @@ Results are saved to timestamped JSONL files in `logs/`:
 |---|---|
 | Adversarial eval | `logs/adversarial_eval_YYYYMMDD_HHMMSS.jsonl` |
 | Golden FP check | `logs/golden_fp_check_YYYYMMDD_HHMMSS.jsonl` |
+
+#### Resilience
+
+Results append to JSONL after each query (survives crashes, hibernation, power loss).
+
+**Auto-resume:** Detects the latest partial JSONL in `logs/` and skips completed queries. Use `--no-resume` to force a fresh run.
+
+**Per-query timeout:** Default 600s (`--query-timeout`). Timed-out queries logged as `"actual_outcome": "timeout"` and retried on next resume.
 
 Dataset: `evals/adversarial_queries.json` (generated with GPT-4o-mini and DeepSeek V3.2). Generators: `evals/generate_adversarial_queries.py`, `evals/generate_national_id_queries.py`. Golden queries: `evals/golden_queries.json`.
 
