@@ -10,6 +10,7 @@ Responsibilities:
 """
 
 import json
+import os
 import re
 import time
 
@@ -123,18 +124,22 @@ class SecurityGovernanceAgent(BaseAgent):
 
             client = get_client(endpoint_name=ep.name, config=config)
             model = get_model_name(endpoint_name=ep.name, config=config)
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
+            create_kwargs = {
+                "model": model,
+                "messages": [
                     {"role": "system", "content": get_prompt("semantic_audit")},
                     {"role": "user", "content": (
                         f"/no_think\nUSER_QUERY: {nl_query}\n\n"
                         f"GENERATED_SQL: {generated_sql}"
                     )},
                 ],
-                temperature=0.0,
-                max_tokens=200,
-            )
+                "temperature": 0.0,
+                "max_tokens": 200,
+            }
+            run_tag = os.environ.get("OPENROUTER_RUN_TAG", "")
+            if run_tag:
+                create_kwargs["user"] = run_tag
+            response = client.chat.completions.create(**create_kwargs)
 
             u = response.usage
             if u:
