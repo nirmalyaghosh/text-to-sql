@@ -2,6 +2,7 @@
 Base Agent class with common functionality for all agents.
 """
 
+import os
 import time
 
 from abc import (
@@ -27,7 +28,8 @@ from text_to_sql.app_logger import get_logger
 
 logger = get_logger(__name__)
 
-DEFAULT_MODEL = "openai:gpt-4o-mini"
+DEFAULT_MODEL = os.environ.get("PIPELINE_MODEL", "openai:gpt-4o-mini")
+OPENROUTER_RUN_TAG = os.environ.get("OPENROUTER_RUN_TAG", "")
 DEFAULT_OUTPUT_RESERVE = 4096
 
 # Model context windows (input + output tokens).
@@ -71,9 +73,13 @@ class BaseAgent(ABC):
         self.agent_name = agent_name
         self.system_prompt = system_prompt
         self.model = model
+        settings = {}
+        if OPENROUTER_RUN_TAG:
+            settings["extra_body"] = {"user": OPENROUTER_RUN_TAG}
         self.pydantic_agent = PydanticAgent(
             model=self.model,
             system_prompt=system_prompt,
+            model_settings=settings or None,
         )
         self._encoder = tiktoken.encoding_for_model(
             "gpt-4o-mini"
