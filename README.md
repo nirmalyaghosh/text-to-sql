@@ -200,6 +200,16 @@ Results append to JSONL after each query (survives crashes, hibernation, power l
 
 **Per-query timeout:** Default 600s (`--query-timeout`). Timed-out queries logged as `"actual_outcome": "timeout"` and retried on next resume.
 
+#### Environment Variables
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `PIPELINE_MODEL` | Override default LLM model | `openai:qwen/qwen3.5-9b` |
+| `OPENROUTER_RUN_TAG` | Tag API calls for cost attribution | `R08` |
+| `OPENROUTER_PROVIDER` | Provider routing preference (JSON) | `{"sort":"latency"}` |
+
+Provider preference examples: `{"sort":"latency"}`, `{"order":["Venice","Together"]}`, `{"ignore":["Together"]}`. See [OpenRouter provider routing docs](https://openrouter.ai/docs/guides/routing/provider-selection).
+
 Dataset: `evals/adversarial_queries.json` (generated with GPT-4o-mini and DeepSeek V3.2). Generators: `evals/generate_adversarial_queries.py`, `evals/generate_national_id_queries.py`. Golden queries: `evals/golden_queries.json`.
 
 Link to [blog post](https://www.nirmalya.net/posts/2026/03/multi-agent-text-to-sql-security-agent-failure/).

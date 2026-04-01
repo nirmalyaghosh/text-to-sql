@@ -2,6 +2,7 @@
 Base Agent class with common functionality for all agents.
 """
 
+import json
 import os
 import time
 
@@ -30,6 +31,7 @@ logger = get_logger(__name__)
 
 DEFAULT_MODEL = os.environ.get("PIPELINE_MODEL", "openai:gpt-4o-mini")
 OPENROUTER_RUN_TAG = os.environ.get("OPENROUTER_RUN_TAG", "")
+OPENROUTER_PROVIDER = os.environ.get("OPENROUTER_PROVIDER", "")
 DEFAULT_OUTPUT_RESERVE = 4096
 
 # Model context windows (input + output tokens).
@@ -73,9 +75,12 @@ class BaseAgent(ABC):
         self.agent_name = agent_name
         self.system_prompt = system_prompt
         self.model = model
-        settings = {}
+        extra_body = {}
         if OPENROUTER_RUN_TAG:
-            settings["extra_body"] = {"user": OPENROUTER_RUN_TAG}
+            extra_body["user"] = OPENROUTER_RUN_TAG
+        if OPENROUTER_PROVIDER:
+            extra_body["provider"] = json.loads(OPENROUTER_PROVIDER)
+        settings = {"extra_body": extra_body} if extra_body else {}
         self.pydantic_agent = PydanticAgent(
             model=self.model,
             system_prompt=system_prompt,

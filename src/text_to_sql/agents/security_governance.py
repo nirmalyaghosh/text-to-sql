@@ -139,6 +139,11 @@ class SecurityGovernanceAgent(BaseAgent):
             run_tag = os.environ.get("OPENROUTER_RUN_TAG", "")
             if run_tag:
                 create_kwargs["user"] = run_tag
+            provider = os.environ.get("OPENROUTER_PROVIDER", "")
+            if provider:
+                create_kwargs["extra_body"] = {
+                    "provider": json.loads(provider),
+                }
             response = client.chat.completions.create(**create_kwargs)
 
             u = response.usage
