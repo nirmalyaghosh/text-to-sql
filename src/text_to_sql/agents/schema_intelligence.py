@@ -94,6 +94,7 @@ class SchemaIntelligenceAgent(BaseAgent):
             model=self.model,
             system_prompt=system_prompt,
             output_type=EntityExtraction,
+            model_settings=self._model_settings,
         )
         self._fk_graph: Dict[str, Set[str]] = {}
         self._fk_details: List[Dict[str, str]] = []

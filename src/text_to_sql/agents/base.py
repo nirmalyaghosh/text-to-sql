@@ -80,11 +80,13 @@ class BaseAgent(ABC):
             extra_body["user"] = OPENROUTER_RUN_TAG
         if OPENROUTER_PROVIDER:
             extra_body["provider"] = json.loads(OPENROUTER_PROVIDER)
-        settings = {"extra_body": extra_body} if extra_body else {}
+        self._model_settings = (
+            {"extra_body": extra_body} if extra_body else None
+        )
         self.pydantic_agent = PydanticAgent(
             model=self.model,
             system_prompt=system_prompt,
-            model_settings=settings or None,
+            model_settings=self._model_settings,
         )
         self._encoder = tiktoken.encoding_for_model(
             "gpt-4o-mini"

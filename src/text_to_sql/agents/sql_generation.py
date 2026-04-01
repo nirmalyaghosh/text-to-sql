@@ -68,6 +68,7 @@ class SQLGenerationAgent(BaseAgent):
             model=self.model,
             system_prompt=system_prompt,
             output_type=GeneratedSQL,
+            model_settings=self._model_settings,
         )
         self._critique_prompt = get_prompt(
             "sql_critique"
@@ -76,6 +77,7 @@ class SQLGenerationAgent(BaseAgent):
             model=self.model,
             system_prompt=self._critique_prompt,
             output_type=SQLCritique,
+            model_settings=self._model_settings,
         )
 
     async def _critique_sql(
