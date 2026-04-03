@@ -74,6 +74,7 @@ class SchemaIntelligenceAgent(BaseAgent):
     def __init__(
         self,
         cache: Optional[CacheBackend] = None,
+        model: Optional[str] = None,
     ):
         """
         Initialize the Schema Intelligence Agent.
@@ -85,11 +86,17 @@ class SchemaIntelligenceAgent(BaseAgent):
                 5 min TTL). Pass None to disable,
                 or inject a Redis-backed implementation
                 for multi-instance deployments.
+            model: Override model for entity
+                extraction. Defaults to PIPELINE_MODEL.
         """
         system_prompt = get_prompt("schema_intelligence")
-        super().__init__(
-            "Schema Intelligence", system_prompt
-        )
+        init_kwargs = {
+            "agent_name": "Schema Intelligence",
+            "system_prompt": system_prompt,
+        }
+        if model:
+            init_kwargs["model"] = model
+        super().__init__(**init_kwargs)
         self._entity_agent = PydanticAgent(
             model=self.model,
             system_prompt=system_prompt,
