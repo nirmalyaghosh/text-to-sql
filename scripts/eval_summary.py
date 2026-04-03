@@ -7,12 +7,15 @@ Parses an adversarial eval JSONL file and prints:
 - Total detection rate
 - Run ID
 
-Optionally computes cost from token_usage.jsonl using the run ID.
+Subcommands:
+    summary (default):
+        python scripts/eval_summary.py <jsonl>
+        python scripts/eval_summary.py <jsonl> --token-usage <path>
+        python scripts/eval_summary.py <jsonl> --console-log <path>
 
-Usage:
-    python scripts/eval_summary.py <jsonl_path>
-    python scripts/eval_summary.py <jsonl_path> --token-usage <token_usage_path>
-    python scripts/eval_summary.py <jsonl_path> --console-log <log_path>
+    validate:
+        python scripts/eval_summary.py validate <jsonl>
+        python scripts/eval_summary.py validate <jsonl> --dataset <path>
 """
 
 import argparse
@@ -168,16 +171,158 @@ def print_summary(
     print()
 
 
+EVALS_DIR = Path(__file__).parent.parent / "evals"
+DEFAULT_DATASET = EVALS_DIR / "adversarial_queries.json"
+
+
+def validate_run(
+    jsonl_path: Path,
+    dataset_path: Path = DEFAULT_DATASET,
+) -> bool:
+    """
+    Validate an eval JSONL for data integrity.
+
+    Checks:
+    1. Single run_id across all records
+    2. No duplicate query IDs
+    3. Full coverage (all non-superseded queries)
+    4. No extra IDs not in dataset
+
+    Returns True if all checks pass.
+    """
+    results = parse_results(jsonl_path=jsonl_path)
+    dataset = json.loads(
+        dataset_path.read_text(encoding="utf-8")
+    )
+
+    ok = True
+
+    # 1. Single run_id
+    run_ids = set(r["run_id"] for r in results)
+    if len(run_ids) == 1:
+        print(f"  [PASS] Single run_id: {run_ids.pop()}")
+    else:
+        print(f"  [FAIL] Multiple run_ids: {run_ids}")
+        ok = False
+
+    # 2. No duplicates
+    qids = [r["id"] for r in results]
+    dupes = [q for q in set(qids) if qids.count(q) > 1]
+    if not dupes:
+        print(
+            f"  [PASS] {len(qids)} records, "
+            f"no duplicates"
+        )
+    else:
+        print(f"  [FAIL] Duplicates: {dupes}")
+        ok = False
+
+    # 3. Coverage
+    dataset_ids = set(q["id"] for q in dataset)
+    superseded = set(
+        q["id"] for q in dataset if q.get("superseded")
+    )
+    expected = dataset_ids - superseded
+    result_ids = set(qids)
+    missing = expected - result_ids
+    if not missing:
+        print(
+            f"  [PASS] Full coverage: "
+            f"{len(expected)} expected, "
+            f"{len(result_ids)} found "
+            f"({len(superseded)} superseded skipped)"
+        )
+    else:
+        print(
+            f"  [FAIL] Missing {len(missing)}: "
+            f"{sorted(missing)[:10]}"
+        )
+        ok = False
+
+    # 4. No extras
+    extra = result_ids - dataset_ids
+    if not extra:
+        print("  [PASS] No extra IDs")
+    else:
+        print(
+            f"  [FAIL] Extra IDs: "
+            f"{sorted(extra)[:10]}"
+        )
+        ok = False
+
+    # 5. Provider IDs check
+    all_pids = [
+        pid
+        for r in results
+        for pid in r.get("provider_ids", [])
+    ]
+    unique_pids = set(all_pids)
+    with_pids = sum(
+        1 for r in results
+        if r.get("provider_ids")
+    )
+    pipeline_records = sum(
+        1 for r in results
+        if r["actual_outcome"] in ("allowed", "blocked")
+        and r.get("blocking_check") not in (
+            "security", "Query Refinement",
+        )
+    )
+    if all_pids:
+        dup_pids = len(all_pids) - len(unique_pids)
+        print(
+            f"  [INFO] provider_ids: "
+            f"{len(unique_pids)} unique across "
+            f"{with_pids} records "
+            f"({pipeline_records} reached LLM)"
+        )
+        if dup_pids:
+            print(
+                f"  [WARN] {dup_pids} duplicate "
+                f"provider_ids"
+            )
+    else:
+        print(
+            "  [INFO] provider_ids: none captured "
+            "(pre-Commit 4 run)"
+        )
+
+    # Summary
+    outcomes = Counter(
+        r["actual_outcome"] for r in results
+    )
+    print(f"\n  Outcomes: {dict(outcomes)}")
+
+    if ok:
+        print("\n  RESULT: CLEAN (no contamination)")
+    else:
+        print("\n  RESULT: ISSUES FOUND")
+
+    return ok
+
+
 def main():
     """
-    Parse arguments and run the eval summary.
+    Parse arguments and run summary or validate.
     """
     parser = argparse.ArgumentParser(
-        description="Eval run summary tool"
+        description=(
+            "Eval run summary and validation tool"
+        ),
     )
     parser.add_argument(
         "jsonl_path",
         help="Path to adversarial eval JSONL file",
+    )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate JSONL integrity instead of summary",
+    )
+    parser.add_argument(
+        "--dataset",
+        default=str(DEFAULT_DATASET),
+        help="Path to adversarial_queries.json",
     )
     parser.add_argument(
         "--token-usage",
@@ -187,7 +332,15 @@ def main():
         "--console-log",
         help="Path to console log for 429 count",
     )
+
     args = parser.parse_args()
+
+    if args.validate:
+        ok = validate_run(
+            jsonl_path=Path(args.jsonl_path),
+            dataset_path=Path(args.dataset),
+        )
+        sys.exit(0 if ok else 1)
 
     results = parse_results(
         jsonl_path=Path(args.jsonl_path)
