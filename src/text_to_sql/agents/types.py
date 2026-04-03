@@ -130,6 +130,13 @@ class ExecutionChainStep(BaseModel):
         default=None,
         description="If agent vetoed, reason why",
     )
+    provider_ids: List[str] = Field(
+        default_factory=list,
+        description=(
+            "OpenRouter generation_ids from LLM "
+            "calls made during this step"
+        ),
+    )
 
 
 class GeneratedSQL(BaseModel):

@@ -106,6 +106,7 @@ class SchemaIntelligenceAgent(BaseAgent):
             if cache is not None
             else InProcessTTLCache()
         )
+        self._last_provider_ids: List[str] = []
 
     def _build_fk_graph(self, full_ddl: str) -> None:
         """
@@ -340,6 +341,7 @@ class SchemaIntelligenceAgent(BaseAgent):
                             duration_ms=(
                                 duration_ms
                             ),
+                            provider_ids=self._last_provider_ids,
                         )
                     ),
                 }
@@ -405,6 +407,7 @@ class SchemaIntelligenceAgent(BaseAgent):
                             "error"
                         ),
                         duration_ms=duration_ms,
+                        provider_ids=self._last_provider_ids,
                     )
                 ),
             }
@@ -526,6 +529,7 @@ class SchemaIntelligenceAgent(BaseAgent):
                     "fk_paths": fk_paths,
                 },
                 duration_ms=duration_ms,
+                provider_ids=self._last_provider_ids,
             )
         )
 
@@ -578,6 +582,7 @@ class SchemaIntelligenceAgent(BaseAgent):
             result = await self._entity_agent.run(
                 prompt
             )
+            self._last_provider_ids = self.extract_provider_ids(result)
             usage = result.usage()
             log_llm_response(
                 request_id=request_id,

@@ -161,9 +161,12 @@ class SecurityGovernanceAgent(BaseAgent):
                     purpose="semantic_audit",
                 )
 
-            return self._parse_audit_response(
+            result = self._parse_audit_response(
                 response.choices[0].message.content.strip()
             )
+            if hasattr(response, "id") and response.id:
+                result["provider_id"] = response.id
+            return result
 
         except json.JSONDecodeError as e:
             logger.warning("Semantic audit: invalid JSON: %s", e)

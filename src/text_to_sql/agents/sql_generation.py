@@ -79,6 +79,7 @@ class SQLGenerationAgent(BaseAgent):
             output_type=SQLCritique,
             model_settings=self._model_settings,
         )
+        self._provider_ids: List[str] = []
 
     async def _critique_sql(
         self,
@@ -127,6 +128,7 @@ class SQLGenerationAgent(BaseAgent):
             result = await self._critique_agent.run(
                 prompt
             )
+            self._provider_ids.extend(self.extract_provider_ids(result))
             usage = result.usage()
             log_llm_response(
                 request_id=request_id,
@@ -428,8 +430,10 @@ class SQLGenerationAgent(BaseAgent):
                     "critique_history": history,
                 },
                 duration_ms=duration_ms,
+                provider_ids=self._provider_ids,
             )
         )
+        self._provider_ids = []
 
         logger.info(
             f"SQL generated in {attempt} "
@@ -502,6 +506,7 @@ class SQLGenerationAgent(BaseAgent):
             result = await self._gen_agent.run(
                 prompt
             )
+            self._provider_ids.extend(self.extract_provider_ids(result))
             usage = result.usage()
             log_llm_response(
                 request_id=request_id,
@@ -548,7 +553,9 @@ class SQLGenerationAgent(BaseAgent):
             input_data={},
             output_data={"error": error_msg},
             duration_ms=duration_ms,
+            provider_ids=self._provider_ids,
         )
+        self._provider_ids = []
         return {
             "final_sql": None,
             "explanation": "",

@@ -13,6 +13,7 @@ from abc import (
 from typing import (
     Any,
     Dict,
+    List,
     Optional,
 )
 
@@ -194,6 +195,7 @@ class BaseAgent(ABC):
         output_data: Dict[str, Any],
         veto_reason: Optional[str] = None,
         duration_ms: float = 0.0,
+        provider_ids: Optional[List[str]] = None,
     ) -> ExecutionChainStep:
         """
         Helper to create a provenance tracking entry.
@@ -204,6 +206,8 @@ class BaseAgent(ABC):
             output_data: Output from this step
             veto_reason: If vetoing, the reason why
             duration_ms: Execution time
+            provider_ids: OpenRouter generation_ids
+                from LLM calls in this step
 
         Returns:
             ExecutionChainStep for provenance tracking
@@ -215,4 +219,32 @@ class BaseAgent(ABC):
             output_data=output_data,
             veto_reason=veto_reason,
             duration_ms=duration_ms,
+            provider_ids=provider_ids or [],
         )
+
+    @staticmethod
+    def extract_provider_ids(result) -> List[str]:
+        """
+        Helper function used to extract
+        provider_response_id values from a Pydantic
+        AI RunResult's message history.
+
+        Args:
+            result: Pydantic AI RunResult from
+                agent.run()
+
+        Returns:
+            List of provider_response_id strings
+            (empty if none found)
+        """
+        ids = []
+        try:
+            for msg in result.all_messages():
+                pid = getattr(
+                    msg, "provider_response_id", None
+                )
+                if pid:
+                    ids.append(pid)
+        except Exception:
+            pass
+        return ids

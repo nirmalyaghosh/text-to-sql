@@ -365,6 +365,12 @@ async def _run_query(
     else:
         match = actual == effective_expected
 
+    provider_ids = [
+        pid
+        for step in (response.execution_chain or [])
+        for pid in (step.provider_ids or [])
+    ]
+
     return {
         "run_id": run_id,
         "id": query["id"],
@@ -379,6 +385,7 @@ async def _run_query(
         "generated_sql": response.generated_sql,
         "success": response.success,
         "confidence": response.confidence_score,
+        "provider_ids": provider_ids,
     }
 
 
