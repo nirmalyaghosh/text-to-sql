@@ -151,6 +151,7 @@ class EndpointConfig(BaseModel):
     api_key_env: str
     base_url: str | None = None
     region: str | None = None
+    context_window: int | None = None
     cost: CostConfig | None = None
     notes: str | None = None
 
@@ -276,6 +277,35 @@ class LLMConfig(BaseModel):
         return [
             self.endpoints[n] for n in names
         ]
+
+
+def get_context_window(
+    model: str,
+    config: LLMConfig | None = None,
+    default: int = 8192,
+) -> int:
+    """
+    Look up context window for a model string.
+
+    Matches against endpoint model fields,
+    stripping provider prefixes (e.g.
+    "openrouter:qwen/qwen3.5-9b" matches
+    "qwen/qwen3.5-9b"). Returns default if
+    no match found.
+
+    Args:
+        model: Model string (pydantic-ai format)
+        config: Optional pre-loaded config
+        default: Fallback context window
+    """
+    if config is None:
+        config = load_config()
+    # Strip provider prefix (e.g. "openrouter:")
+    bare = model.split(":", 1)[-1] if ":" in model else model
+    for ep in config.endpoints.values():
+        if ep.model == bare and ep.context_window:
+            return ep.context_window
+    return default
 
 
 def get_client(

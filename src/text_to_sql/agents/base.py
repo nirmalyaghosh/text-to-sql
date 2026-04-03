@@ -26,6 +26,7 @@ from text_to_sql.agents.types import (
     QueryRequest,
 )
 from text_to_sql.app_logger import get_logger
+from text_to_sql.llm_config import get_context_window
 
 
 logger = get_logger(__name__)
@@ -34,16 +35,6 @@ DEFAULT_MODEL = os.environ.get("PIPELINE_MODEL", "openai:gpt-4o-mini")
 OPENROUTER_RUN_TAG = os.environ.get("OPENROUTER_RUN_TAG", "")
 OPENROUTER_PROVIDER = os.environ.get("OPENROUTER_PROVIDER", "")
 DEFAULT_OUTPUT_RESERVE = 4096
-
-# Model context windows (input + output tokens).
-# Conservative fallback for unknown models.
-MODEL_CONTEXT_WINDOWS: Dict[str, int] = {
-    "openai:gpt-4o": 128_000,
-    "openai:gpt-4o-mini": 128_000,
-    "openai:gpt-4-turbo": 128_000,
-    "openai:gpt-4": 8_192,
-    "openai:gpt-3.5-turbo": 16_385,
-}
 DEFAULT_CONTEXT_WINDOW = 8_192
 
 
@@ -151,8 +142,9 @@ class BaseAgent(ABC):
             Available token budget (may be negative
             if already over)
         """
-        context_window = MODEL_CONTEXT_WINDOWS.get(
-            self.model, DEFAULT_CONTEXT_WINDOW
+        context_window = get_context_window(
+            model=self.model,
+            default=DEFAULT_CONTEXT_WINDOW,
         )
         return (
             context_window
