@@ -197,6 +197,69 @@ class OrchestratorAgent(BaseAgent):
                         ),
                     )
 
+                # Semantic intent audit
+                semantic = (
+                    await sec.audit_semantic_intent(
+                        nl_query=refined_query,
+                        generated_sql=generated_sql,
+                    )
+                )
+                sem_pids = []
+                sem_pid = semantic.get("provider_id")
+                if sem_pid:
+                    sem_pids.append(sem_pid)
+                if not semantic.get("safe"):
+                    reason = semantic.get("reason")
+                    logger.warning(
+                        "Semantic audit blocked"
+                        f": {reason}"
+                    )
+                    execution_chain.append(
+                        self.create_execution_step(
+                            action=(
+                                "semantic_audit"
+                                "_blocked"
+                            ),
+                            input_data={
+                                "sql": (
+                                    generated_sql
+                                ),
+                                "query": (
+                                    refined_query
+                                ),
+                            },
+                            output_data=semantic,
+                            veto_reason=reason,
+                            provider_ids=sem_pids,
+                        )
+                    )
+                    return AgenticResponse(
+                        success=False,
+                        formatted_answer=(
+                            "Generated SQL blocked"
+                            " by semantic intent"
+                            " audit"
+                        ),
+                        error_message=reason,
+                        execution_chain=(
+                            execution_chain
+                        ),
+                    )
+                elif sem_pids:
+                    execution_chain.append(
+                        self.create_execution_step(
+                            action=(
+                                "semantic_audit"
+                                "_passed"
+                            ),
+                            input_data={},
+                            output_data={
+                                "safe": True,
+                            },
+                            provider_ids=sem_pids,
+                        )
+                    )
+
             # Phase 2 response with SQL
             schema_result = intermediate_results.get(
                 "schema", {}
