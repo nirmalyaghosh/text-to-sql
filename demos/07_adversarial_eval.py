@@ -22,6 +22,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 
 from datetime import datetime
 from pathlib import Path
@@ -474,6 +475,8 @@ async def run_adversarial_eval(
     else:
         run_id = generate_run_id()
         results_path = _fresh_path()
+
+    os.environ["OPENROUTER_RUN_TAG"] = f"txt2sql-adv-{run_id}"
 
     logger.info(
         f"  Run ID: {run_id}, "
