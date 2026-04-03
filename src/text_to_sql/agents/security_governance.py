@@ -147,6 +147,7 @@ class SecurityGovernanceAgent(BaseAgent):
             response = client.chat.completions.create(**create_kwargs)
 
             u = response.usage
+            gen_id = response.id if hasattr(response, "id") else ""
             if u:
                 log_llm_response(
                     request_id="semantic_audit",
@@ -159,6 +160,7 @@ class SecurityGovernanceAgent(BaseAgent):
                     },
                     generated_sql=generated_sql[:200],
                     purpose="semantic_audit",
+                    generation_id=gen_id or "",
                 )
 
             result = self._parse_audit_response(

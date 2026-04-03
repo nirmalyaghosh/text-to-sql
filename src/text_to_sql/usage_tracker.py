@@ -54,6 +54,14 @@ def _ensure_handler() -> TimedRotatingFileHandler:
     return _handler
 
 
+def _get_run_tag() -> str:
+    """
+    Helper function used to read the current
+    OpenRouter run tag from the environment.
+    """
+    return os.environ.get("OPENROUTER_RUN_TAG", "")
+
+
 def generate_run_id() -> str:
     """
     Generate a new run_id and reset the request counter.
@@ -87,6 +95,7 @@ def log_llm_request(
         "event": "llm_request",
         "purpose": purpose,
         "request_id": request_id,
+        "run_tag": _get_run_tag(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "question": question,
@@ -107,6 +116,7 @@ def log_llm_response(
     generated_sql: str,
     trim_sql_preview: bool = False,
     purpose: str = "pipeline",
+    generation_id: str = "",
 ) -> None:
     """
     Log an LLM response with token usage.
@@ -121,6 +131,8 @@ def log_llm_response(
         "event": "llm_response",
         "purpose": purpose,
         "request_id": request_id,
+        "run_tag": _get_run_tag(),
+        "generation_id": generation_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "question": question,

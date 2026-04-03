@@ -589,24 +589,20 @@ class SchemaIntelligenceAgent(BaseAgent):
             result = await self._entity_agent.run(
                 prompt
             )
-            self._last_provider_ids = self.extract_provider_ids(result)
+            self._last_provider_ids = self.extract_provider_ids(result=result)
             usage = result.usage()
+            gen_id = self._last_provider_ids[0] if self._last_provider_ids else ""
             log_llm_response(
                 request_id=request_id,
                 model=self.model,
                 question=query,
                 usage={
-                    "input_tokens": (
-                        usage.input_tokens
-                    ),
-                    "output_tokens": (
-                        usage.output_tokens
-                    ),
+                    "input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
                 },
-                generated_sql=(
-                    "[entity_extraction]"
-                ),
+                generated_sql="[entity_extraction]",
                 trim_sql_preview=False,
+                generation_id=gen_id,
             )
             return result.output
         except Exception as e:

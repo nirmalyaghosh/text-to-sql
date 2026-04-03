@@ -128,25 +128,20 @@ class SQLGenerationAgent(BaseAgent):
             result = await self._critique_agent.run(
                 prompt
             )
-            self._provider_ids.extend(self.extract_provider_ids(result))
+            pids = self.extract_provider_ids(result=result)
+            self._provider_ids.extend(pids)
             usage = result.usage()
             log_llm_response(
                 request_id=request_id,
                 model=self.model,
                 question=query,
                 usage={
-                    "input_tokens": (
-                        usage.input_tokens
-                    ),
-                    "output_tokens": (
-                        usage.output_tokens
-                    ),
+                    "input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
                 },
-                generated_sql=(
-                    "[critique] "
-                    f"valid={result.output.is_valid}"
-                ),
+                generated_sql=f"[critique] valid={result.output.is_valid}",
                 trim_sql_preview=False,
+                generation_id=pids[0] if pids else "",
             )
             return result.output
         except Exception as e:
@@ -506,21 +501,19 @@ class SQLGenerationAgent(BaseAgent):
             result = await self._gen_agent.run(
                 prompt
             )
-            self._provider_ids.extend(self.extract_provider_ids(result))
+            pids = self.extract_provider_ids(result=result)
+            self._provider_ids.extend(pids)
             usage = result.usage()
             log_llm_response(
                 request_id=request_id,
                 model=self.model,
                 question=query,
                 usage={
-                    "input_tokens": (
-                        usage.input_tokens
-                    ),
-                    "output_tokens": (
-                        usage.output_tokens
-                    ),
+                    "input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
                 },
                 generated_sql=result.output.sql,
+                generation_id=pids[0] if pids else "",
             )
             return result.output
         except Exception as e:
