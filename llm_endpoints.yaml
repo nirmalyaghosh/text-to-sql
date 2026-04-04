@@ -36,6 +36,8 @@ endpoints:
   # OpenAI (direct)
   # Source: https://openai.com/api/pricing/
   # ---------------------------------------------------------------------------
+  # DEPRECATED: gpt-4o-mini snapshot sunset 27 Feb 2026.
+  # Alias still resolves but model is legacy. Replace with gpt-4.1-nano.
   openai-gpt4o-mini:
     provider: openai
     model: gpt-4o-mini
@@ -46,75 +48,14 @@ endpoints:
       output_per_1m: 0.60
       pricing_url: https://openai.com/api/pricing/
       pricing_checked: "2026-03-21"
+      pricing_notes: "SUNSET 27 Feb 2026. Replace with gpt-4.1-nano ($0.10/$0.40) or gpt-4.1-mini ($0.40/$1.60)."
 
   # ---------------------------------------------------------------------------
-  # OpenRouter
+  # OpenRouter (alphabetical by key)
   # Source: https://openrouter.ai/models
   #
   # OpenRouter proxies multiple providers via a single OpenAI-compatible API.
   # ---------------------------------------------------------------------------
-  openrouter-gpt4o-mini:
-    provider: openrouter
-    model: openai/gpt-4o-mini
-    api_key_env: OPENROUTER_API_KEY
-    context_window: 128000  # https://platform.openai.com/docs/models/gpt-4o-mini
-    base_url: https://openrouter.ai/api/v1
-    cost:
-      input_per_1m: 0.15
-      output_per_1m: 0.60
-      pricing_url: https://openrouter.ai/models/openai/gpt-4o-mini
-      pricing_checked: "2026-04-03"
-
-  openrouter-qwen3.5-9b:
-    provider: openrouter
-    model: qwen/qwen3.5-9b
-    api_key_env: OPENROUTER_API_KEY
-    context_window: 256000  # https://huggingface.co/Qwen/Qwen3.5-9B
-    base_url: https://openrouter.ai/api/v1
-    cost:
-      input_per_1m: 0.05
-      output_per_1m: 0.15
-      pricing_url: https://openrouter.ai/models/qwen/qwen3.5-9b
-      pricing_checked: "2026-03-30"
-    notes: >
-      Qwen 3.5 9B via OpenRouter. Used for semantic output audit
-      and as adversarial eval pipeline model (R07, R09, R12).
-
-  openrouter-qwen3-32b:
-    provider: openrouter
-    model: qwen/qwen3-32b
-    api_key_env: OPENROUTER_API_KEY
-    context_window: 40960  # https://huggingface.co/Qwen/Qwen3-32B (native max_position_embeddings; 131072 with YaRN)
-    base_url: https://openrouter.ai/api/v1
-    cost:
-      input_per_1m: 0.08
-      output_per_1m: 0.30
-      pricing_url: https://openrouter.ai/models/qwen/qwen3-32b
-      pricing_checked: "2026-04-03"
-
-  openrouter-seed-2.0-mini:
-    provider: openrouter
-    model: bytedance-seed/seed-2.0-mini
-    api_key_env: OPENROUTER_API_KEY
-    context_window: 262144  # https://openrouter.ai/bytedance-seed/seed-2.0-mini (no official ByteDance docs)
-    base_url: https://openrouter.ai/api/v1
-    cost:
-      input_per_1m: 0.10
-      output_per_1m: 0.30
-      pricing_url: https://openrouter.ai/models/bytedance-seed/seed-2.0-mini
-      pricing_checked: "2026-04-03"
-
-  openrouter-minimax-m2.5:
-    provider: openrouter
-    model: minimax/minimax-m2.5
-    api_key_env: OPENROUTER_API_KEY
-    context_window: 196608  # https://huggingface.co/MiniMaxAI/MiniMax-M2.5/blob/main/config.json
-    base_url: https://openrouter.ai/api/v1
-    cost:
-      input_per_1m: 0.118
-      output_per_1m: 0.472
-      pricing_url: https://openrouter.ai/models/minimax/minimax-m2.5
-      pricing_checked: "2026-04-03"
 
   openrouter-deepseek-v3.1:
     provider: openrouter
@@ -127,6 +68,21 @@ endpoints:
       output_per_1m: 0.60
       pricing_url: https://openrouter.ai/models/deepseek/deepseek-chat-v3.1
       pricing_checked: "2026-04-03"
+
+  openrouter-deepseek-v3.2:
+    provider: openrouter
+    model: deepseek/deepseek-v3.2
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 128000  # https://api-docs.deepseek.com/news/news251201
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.26
+      output_per_1m: 0.38
+      pricing_url: https://openrouter.ai/deepseek/deepseek-v3.2
+      pricing_checked: "2026-04-04"
+    notes: >
+      671B/37B MoE. Current DeepSeek flagship (since Dec 2025).
+      Source: https://arxiv.org/html/2512.02556v1
 
   openrouter-gemini-2.0-flash:
     provider: openrouter
@@ -152,18 +108,6 @@ endpoints:
       pricing_url: https://openrouter.ai/models/google/gemini-3.1-flash-lite-preview
       pricing_checked: "2026-04-03"
 
-  openrouter-mistral-small-2603:
-    provider: openrouter
-    model: mistralai/mistral-small-2603
-    api_key_env: OPENROUTER_API_KEY
-    context_window: 128000  # https://docs.mistral.ai/getting-started/models/models_overview/
-    base_url: https://openrouter.ai/api/v1
-    cost:
-      input_per_1m: 0.15
-      output_per_1m: 0.45
-      pricing_url: https://openrouter.ai/models/mistralai/mistral-small-2603
-      pricing_checked: "2026-04-03"
-
   openrouter-glm-4.7-flash:
     provider: openrouter
     model: z-ai/glm-4.7-flash
@@ -176,6 +120,34 @@ endpoints:
       pricing_url: https://openrouter.ai/models/z-ai/glm-4.7-flash
       pricing_checked: "2026-04-03"
 
+  openrouter-gpt4.1-nano:
+    provider: openrouter
+    model: openai/gpt-4.1-nano
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 1047576  # https://openrouter.ai/openai/gpt-4.1-nano
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.10
+      output_per_1m: 0.40
+      pricing_url: https://openrouter.ai/openai/gpt-4.1-nano
+      pricing_checked: "2026-04-04"
+    notes: >
+      GPT-4.1 Nano. Replaces gpt-4o-mini (sunset 27 Feb 2026).
+      Fastest/cheapest in GPT-4.1 series.
+
+  openrouter-gpt4o-mini:
+    provider: openrouter
+    model: openai/gpt-4o-mini
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 128000  # https://platform.openai.com/docs/models/gpt-4o-mini
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+      pricing_url: https://openrouter.ai/models/openai/gpt-4o-mini
+      pricing_checked: "2026-04-03"
+    notes: gpt-4o-mini snapshot sunset 27 Feb 2026. Alias still resolves but model is legacy. Replace with gpt-4.1-nano.
+
   openrouter-mimo-v2-flash:
     provider: openrouter
     model: xiaomi/mimo-v2-flash
@@ -186,6 +158,30 @@ endpoints:
       input_per_1m: 0.09
       output_per_1m: 0.09
       pricing_url: https://openrouter.ai/models/xiaomi/mimo-v2-flash
+      pricing_checked: "2026-04-03"
+
+  openrouter-minimax-m2.5:
+    provider: openrouter
+    model: minimax/minimax-m2.5
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 196608  # https://huggingface.co/MiniMaxAI/MiniMax-M2.5/blob/main/config.json
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.118
+      output_per_1m: 0.472
+      pricing_url: https://openrouter.ai/models/minimax/minimax-m2.5
+      pricing_checked: "2026-04-03"
+
+  openrouter-mistral-small-2603:
+    provider: openrouter
+    model: mistralai/mistral-small-2603
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 128000  # https://docs.mistral.ai/getting-started/models/models_overview/
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.15
+      output_per_1m: 0.45
+      pricing_url: https://openrouter.ai/models/mistralai/mistral-small-2603
       pricing_checked: "2026-04-03"
 
   openrouter-nemotron-120b:
@@ -200,6 +196,61 @@ endpoints:
       pricing_url: https://openrouter.ai/models/nvidia/nemotron-3-super-120b-a12b:free
       pricing_checked: "2026-04-03"
     notes: Free tier model.
+
+  openrouter-qwen3-32b:
+    provider: openrouter
+    model: qwen/qwen3-32b
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 40960  # https://huggingface.co/Qwen/Qwen3-32B (native max_position_embeddings; 131072 with YaRN)
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.08
+      output_per_1m: 0.30
+      pricing_url: https://openrouter.ai/models/qwen/qwen3-32b
+      pricing_checked: "2026-04-03"
+
+  openrouter-qwen3.5-9b:
+    provider: openrouter
+    model: qwen/qwen3.5-9b
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 256000  # https://huggingface.co/Qwen/Qwen3.5-9B
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.05
+      output_per_1m: 0.15
+      pricing_url: https://openrouter.ai/models/qwen/qwen3.5-9b
+      pricing_checked: "2026-03-30"
+    notes: >
+      Qwen 3.5 9B via OpenRouter. Used for semantic output audit
+      and as adversarial eval pipeline model (R07, R09, R12).
+
+  openrouter-qwen3.5-plus:
+    provider: openrouter
+    model: qwen/qwen3.5-plus-02-15
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 1000000  # https://huggingface.co/Qwen/Qwen3.5-397B-A17B
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.26
+      output_per_1m: 1.56
+      pricing_url: https://openrouter.ai/qwen/qwen3.5-plus-02-15
+      pricing_checked: "2026-04-04"
+    notes: >
+      397B/17B MoE (hybrid linear attn + sparse MoE).
+      Alibaba Cloud Tongyi lab.
+      Source: https://huggingface.co/Qwen/Qwen3.5-397B-A17B
+
+  openrouter-seed-2.0-mini:
+    provider: openrouter
+    model: bytedance-seed/seed-2.0-mini
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 262144  # https://openrouter.ai/bytedance-seed/seed-2.0-mini (no official ByteDance docs)
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.10
+      output_per_1m: 0.30
+      pricing_url: https://openrouter.ai/models/bytedance-seed/seed-2.0-mini
+      pricing_checked: "2026-04-03"
 
 # -----------------------------------------------------------------------------
 # Roles: map logical roles to endpoint names
