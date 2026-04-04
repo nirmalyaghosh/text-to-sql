@@ -61,13 +61,20 @@ def get_schema_ddl(llm_context: bool = True) -> str:
     Helper function used to read the schema DDL file as a string.
 
     When llm_context=True (default), returns only the CREATE TABLE
-    blocks — stripping comments, DROP statements, and operational
+    blocks, stripping comments, DROP statements, and operational
     commands that waste tokens and add no structural information.
 
     When llm_context=False, returns the full file as-is
     (used by init_db to set up the database).
+
+    Schema file path is configurable via SCHEMA_FILE env var.
+    Defaults to schema/schema_setup.sql.
     """
-    schema_file = SCHEMA_DIR / "schema_setup.sql"
+    env_path = os.environ.get("SCHEMA_FILE")
+    schema_file = (
+        Path(env_path) if env_path
+        else SCHEMA_DIR / "schema_setup.sql"
+    )
     schema_sql = schema_file.read_text(encoding="utf-8")
 
     if not llm_context:
