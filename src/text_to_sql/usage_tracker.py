@@ -62,6 +62,14 @@ def _get_run_tag() -> str:
     return os.environ.get("OPENROUTER_RUN_TAG", "")
 
 
+def _get_run_label() -> str:
+    """
+    Helper function used to read the current
+    run label from the environment.
+    """
+    return os.environ.get("OPENROUTER_RUN_LABEL", "")
+
+
 def generate_run_id() -> str:
     """
     Generate a new run_id and reset the request counter.
@@ -96,6 +104,7 @@ def log_llm_request(
         "purpose": purpose,
         "request_id": request_id,
         "run_tag": _get_run_tag(),
+        "run_label": _get_run_label(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "question": question,
@@ -132,6 +141,7 @@ def log_llm_response(
         "purpose": purpose,
         "request_id": request_id,
         "run_tag": _get_run_tag(),
+        "run_label": _get_run_label(),
         "generation_id": generation_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,

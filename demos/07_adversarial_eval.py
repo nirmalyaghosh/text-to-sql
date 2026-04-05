@@ -128,6 +128,7 @@ def _error_result(
     query: dict,
     outcome: str,
     error: str | None = None,
+    run_label: str | None = None,
 ) -> dict:
     """
     Helper function used to build a result dict
@@ -135,6 +136,7 @@ def _error_result(
     """
     r = {
         "run_id": run_id,
+        "run_label": run_label,
         "id": query["id"],
         "vector": query["vector"],
         "attack_technique": query["attack_technique"],
@@ -237,13 +239,16 @@ def _log_result(result: dict) -> None:
 def _log_summary(
     results: list[dict],
     skipped: int,
+    run_id: str = "",
+    run_label: str | None = None,
 ) -> None:
     """
     Helper function used to log the evaluation
     summary with per-vector detection rates.
     """
+    lbl = f" ({run_label})" if run_label else ""
     _log_divider()
-    logger.info("  ADVERSARIAL EVAL SUMMARY")
+    logger.info(f"  ADVERSARIAL EVAL SUMMARY [{run_id}{lbl}]")
     _log_divider()
 
     vectors: dict[str, dict] = {}
@@ -307,6 +312,7 @@ async def _run_query(
     query: dict,
     run_id: str,
     extended_pii: bool = False,
+    run_label: str | None = None,
 ) -> dict:
     """
     Helper function used to run a single adversarial
@@ -377,6 +383,7 @@ async def _run_query(
 
     return {
         "run_id": run_id,
+        "run_label": run_label,
         "id": query["id"],
         "vector": query.get("vector"),
         "attack_technique": query.get("attack_technique"),
@@ -417,6 +424,8 @@ async def run_adversarial_eval(
     query_timeout: int = 600,
     no_resume: bool = False,
     skip_schema_mod: bool = True,
+    query_ids: list[str] | None = None,
+    run_label: str | None = None,
 ) -> None:
     """
     Run adversarial queries from
@@ -438,6 +447,8 @@ async def run_adversarial_eval(
             columns). Default True for backward
             compat; pass --no-skip-schema-mod
             when the adversarial schema is loaded
+        query_ids: When provided, only run
+            queries whose id is in this list
     """
     pii_label = "ON" if extended_pii else "OFF"
     logger.info("")
@@ -451,6 +462,15 @@ async def run_adversarial_eval(
     _log_divider()
 
     queries = _load_queries()
+    if query_ids:
+        queries = [
+            q for q in queries
+            if q["id"] in query_ids
+        ]
+        logger.info(
+            f"  Filtered to {len(queries)} "
+            f"query(ies): {', '.join(query_ids)}"
+        )
     completed_ids: set[str] = set()
     results_path: Path
     run_id: str
@@ -488,10 +508,16 @@ async def run_adversarial_eval(
         results_path = _fresh_path()
 
     os.environ["OPENROUTER_RUN_TAG"] = f"txt2sql-adv-{run_id}"
+    os.environ["OPENROUTER_RUN_LABEL"] = run_label or ""
 
+    schema = os.environ.get("SCHEMA_FILE", "(default)")
+    model = os.environ.get("PIPELINE_MODEL", "(default)")
+    qid_str = ",".join(query_ids) if query_ids else "(all)"
+    label = f" ({run_label})" if run_label else ""
     logger.info(
-        f"  Run ID: {run_id}, "
-        f"{len(queries)} adversarial queries"
+        f"  Run {run_id}{label} | {len(queries)} queries [{qid_str}] | "
+        f"model={model} | schema={schema} | "
+        f"pii={pii_label} | skip_schema_mod={skip_schema_mod}"
     )
     logger.info(f"  Output: {results_path}")
     logger.info("")
@@ -529,7 +555,7 @@ async def run_adversarial_eval(
             and query.get("requires_schema_modification")
         ):
             logger.info(
-                f"  SKIP {qid}: "
+                f"  [{run_id}{label}] SKIP {qid}: "
                 f"requires schema modification"
             )
             skipped += 1
@@ -537,6 +563,7 @@ async def run_adversarial_eval(
                 run_id=run_id,
                 query=query,
                 outcome="skipped",
+                run_label=run_label,
             )
             _append_result(
                 path=results_path, result=result,
@@ -545,7 +572,7 @@ async def run_adversarial_eval(
             continue
 
         logger.info(
-            f"  Running {qid}: "
+            f"  [{run_id}{label}] Running {qid}: "
             f"{query['description']}..."
         )
         try:
@@ -558,13 +585,14 @@ async def run_adversarial_eval(
                     query=query,
                     run_id=run_id,
                     extended_pii=extended_pii,
+                    run_label=run_label,
                 ),
                 timeout=query_timeout,
             )
             _log_result(result=result)
         except asyncio.TimeoutError:
             logger.warning(
-                f"  {qid} TIMEOUT "
+                f"  [{run_id}{label}] {qid} TIMEOUT "
                 f"after {query_timeout}s"
             )
             result = _error_result(
@@ -572,14 +600,16 @@ async def run_adversarial_eval(
                 query=query,
                 outcome="timeout",
                 error=f"timeout after {query_timeout}s",
+                run_label=run_label,
             )
         except Exception as e:
-            logger.error(f"  {qid} FAILED: {e}")
+            logger.error(f"  [{run_id}{label}] {qid} FAILED: {e}")
             result = _error_result(
                 run_id=run_id,
                 query=query,
                 outcome="error",
                 error=str(e),
+                run_label=run_label,
             )
         _append_result(
             path=results_path, result=result,
@@ -590,6 +620,8 @@ async def run_adversarial_eval(
     _log_summary(
         results=all_results,
         skipped=skipped,
+        run_id=run_id,
+        run_label=run_label,
     )
     logger.info(f"  Results saved to {results_path}")
     logger.info("")
@@ -749,6 +781,22 @@ if __name__ == "__main__":
             "false errors from missing columns"
         ),
     )
+    parser.add_argument(
+        "--query-ids",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated query IDs to run "
+            "(e.g. AQ-006,AQ-034). "
+            "When set, only these queries execute"
+        ),
+    )
+    parser.add_argument(
+        "--run-label",
+        type=str,
+        default=None,
+        help="Human-readable label logged alongside run ID (e.g. SCH-MD-01)",
+    )
     args = parser.parse_args()
 
     setup_logging()
@@ -764,11 +812,17 @@ if __name__ == "__main__":
             )
         )
     else:
+        qids = (
+            args.query_ids.split(",")
+            if args.query_ids else None
+        )
         asyncio.run(
             run_adversarial_eval(
                 extended_pii=args.extended_pii,
                 no_resume=args.no_resume,
                 query_timeout=args.query_timeout,
                 skip_schema_mod=not args.no_skip_schema_mod,
+                query_ids=qids,
+                run_label=args.run_label,
             )
         )
