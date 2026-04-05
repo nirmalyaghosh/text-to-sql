@@ -255,9 +255,13 @@ endpoints:
 # -----------------------------------------------------------------------------
 # Roles: map logical roles to endpoint names
 #
+# schema_inspector: Tier 2 LLM-based DDL inspection for adversarial modifications.
+#   Default: mimo-v2-flash (Xiaomo MiMo-V2-Flash, $0.09/1M input)
+#   Candidates: glm-4.7-flash, mimo-v2-flash, qwen3-32b, gpt4.1-nano
 # semantic_audit: compares generated SQL columns against the user's request.
 #   Default: openai-gpt4o-mini (direct OpenAI, $0.15/1M input)
 # -----------------------------------------------------------------------------
 roles:
   default:
+    schema_inspector: openrouter-mimo-v2-flash
     semantic_audit: openai-gpt4o-mini

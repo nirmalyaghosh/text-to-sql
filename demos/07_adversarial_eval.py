@@ -16,6 +16,7 @@ Usage:
     uv run python -m demos.07_adversarial_eval
     uv run python -m demos.07_adversarial_eval --no-resume
     uv run python -m demos.07_adversarial_eval --query-timeout 300
+    uv run python -m demos.07_adversarial_eval --no-skip-schema-mod
 """
 
 import argparse
@@ -41,6 +42,8 @@ from text_to_sql.app_logger import (
     get_logger,
     setup_logging,
 )
+from text_to_sql.db import get_schema_ddl
+from text_to_sql.schema_inspector import inspect_schema
 from text_to_sql.usage_tracker import generate_run_id
 
 
@@ -413,6 +416,7 @@ async def run_adversarial_eval(
     extended_pii: bool = False,
     query_timeout: int = 600,
     no_resume: bool = False,
+    skip_schema_mod: bool = True,
 ) -> None:
     """
     Run adversarial queries from
@@ -427,6 +431,13 @@ async def run_adversarial_eval(
         extended_pii: Enable extended PII patterns
         query_timeout: Per-query timeout in seconds
         no_resume: Force a fresh run
+        skip_schema_mod: Skip queries whose
+            adversarial_queries.json entry has
+            requires_schema_modification=true
+            (e.g. queries targeting injected
+            columns). Default True for backward
+            compat; pass --no-skip-schema-mod
+            when the adversarial schema is loaded
     """
     pii_label = "ON" if extended_pii else "OFF"
     logger.info("")
@@ -485,6 +496,22 @@ async def run_adversarial_eval(
     logger.info(f"  Output: {results_path}")
     logger.info("")
 
+    # Two-tier schema inspection at startup
+    ddl = get_schema_ddl(llm_context=True)
+    schema_findings = inspect_schema(
+        ddl=ddl, skip_tier2=False,
+    )
+    if schema_findings:
+        logger.info(
+            "  Schema inspection: %d suspicious "
+            "element(s) detected",
+            len(schema_findings),
+        )
+    else:
+        logger.info(
+            "  Schema inspection: clean"
+        )
+
     all_results = []
     skipped = 0
 
@@ -494,7 +521,13 @@ async def run_adversarial_eval(
         if qid in completed_ids:
             continue
 
-        if query.get("requires_schema_modification"):
+        # Backward compat: skip queries needing
+        # adversarial columns when --skip-schema-mod
+        # is set (prior eval runs depend on this).
+        if (
+            skip_schema_mod
+            and query.get("requires_schema_modification")
+        ):
             logger.info(
                 f"  SKIP {qid}: "
                 f"requires schema modification"
@@ -706,6 +739,16 @@ if __name__ == "__main__":
         default=600,
         help="Per-query timeout in seconds (default 600)",
     )
+    parser.add_argument(
+        "--no-skip-schema-mod",
+        action="store_true",
+        help=(
+            "Run queries that need adversarial "
+            "schema columns (e.g. injected_instruction). "
+            "By default these are skipped to avoid "
+            "false errors from missing columns"
+        ),
+    )
     args = parser.parse_args()
 
     setup_logging()
@@ -726,5 +769,6 @@ if __name__ == "__main__":
                 extended_pii=args.extended_pii,
                 no_resume=args.no_resume,
                 query_timeout=args.query_timeout,
+                skip_schema_mod=not args.no_skip_schema_mod,
             )
         )
