@@ -68,8 +68,9 @@ class BaseAgent(ABC):
         self.system_prompt = system_prompt
         self.model = model
         extra_body = {}
-        if OPENROUTER_RUN_TAG:
-            extra_body["user"] = OPENROUTER_RUN_TAG
+        run_tag = os.environ.get("OPENROUTER_RUN_TAG", "")
+        if run_tag:
+            extra_body["user"] = run_tag
         if OPENROUTER_PROVIDER:
             extra_body["provider"] = json.loads(OPENROUTER_PROVIDER)
         self._model_settings = (
