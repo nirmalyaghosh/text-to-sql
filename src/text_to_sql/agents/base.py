@@ -31,7 +31,7 @@ from text_to_sql.llm_config import get_context_window
 
 logger = get_logger(__name__)
 
-DEFAULT_MODEL = os.environ.get("PIPELINE_MODEL", "openai:gpt-4o-mini")
+DEFAULT_MODEL = os.environ.get("PIPELINE_MODEL", "openrouter:qwen/qwen3.5-9b")
 OPENROUTER_RUN_TAG = os.environ.get("OPENROUTER_RUN_TAG", "")
 OPENROUTER_PROVIDER = os.environ.get("OPENROUTER_PROVIDER", "")
 DEFAULT_OUTPUT_RESERVE = 4096

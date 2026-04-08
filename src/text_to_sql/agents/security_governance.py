@@ -43,14 +43,29 @@ class SecurityGovernanceAgent(BaseAgent):
     and applies data masking rules.
     """
 
-    def __init__(self, extended_pii: bool = False):
+    def __init__(
+        self,
+        extended_pii: bool = False,
+        model: str | None = None,
+    ):
         """
         Initialize the Security & Governance Agent.
+
+        Args:
+            extended_pii: Enable extended PII
+                patterns
+            model: LLM model identifier. When
+                None, uses DEFAULT_MODEL from
+                BaseAgent.
         """
         system_prompt = get_prompt("security_governance")
-        super().__init__(
-            "Security & Governance", system_prompt
-        )
+        kwargs: dict = {
+            "agent_name": "Security & Governance",
+            "system_prompt": system_prompt,
+        }
+        if model:
+            kwargs["model"] = model
+        super().__init__(**kwargs)
         self.policies = self._load_security_policies()
         self.pii_patterns = self._load_pii_patterns()
         self.pii_field_patterns = self._load_pii_field_patterns(extended_pii)

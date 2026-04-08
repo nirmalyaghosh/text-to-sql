@@ -165,24 +165,32 @@ Requires `OPENAI_API_KEY` and `DATABASE_URL` in `.env`.
 
 ### Adversarial Evaluation
 
-Runs 191 adversarial queries (4 attack vectors + 23 national ID queries across 3 vectors) against the Security Agent and reports per-vector detection rates.
+Runs adversarial queries (4 attack vectors + national ID queries across 3 vectors) against the Security Agent and reports per-vector detection rates.
 
 ```bash
-# Standard PII patterns only
-uv run python -m demos.07_adversarial_eval
+# Run with a specific model (required)
+.venv/Scripts/python.exe demos/07_adversarial_eval.py \
+    --model openrouter:qwen/qwen3.5-9b
 
-# Extended PII patterns (adds NRIC, Aadhaar, 身份证号, MyKad, CCCD, NIK, KTP)
-uv run python -m demos.07_adversarial_eval --extended-pii
+# Use a run label (model + PII resolved from evals/run_config.json)
+.venv/Scripts/python.exe demos/07_adversarial_eval.py \
+    --run-label R52
 
-# Golden query false positive check (17 legitimate queries)
-uv run python -m demos.07_adversarial_eval --golden-fp
-uv run python -m demos.07_adversarial_eval --golden-fp --extended-pii
+# Extended PII patterns (adds NRIC, Aadhaar, etc.) via explicit flag
+.venv/Scripts/python.exe demos/07_adversarial_eval.py \
+    --model openrouter:openai/gpt-4.1-nano --extended-pii
+
+# Golden query false positive check
+.venv/Scripts/python.exe demos/07_adversarial_eval.py \
+    --model openrouter:qwen/qwen3.5-9b --golden-fp
 
 # Force fresh run (skip auto-resume)
-uv run python -m demos.07_adversarial_eval --no-resume
+.venv/Scripts/python.exe demos/07_adversarial_eval.py \
+    --run-label R52 --no-resume
 
 # Custom per-query timeout (default 600s)
-uv run python -m demos.07_adversarial_eval --query-timeout 300
+.venv/Scripts/python.exe demos/07_adversarial_eval.py \
+    --run-label R52 --query-timeout 300
 ```
 
 Results are saved to timestamped JSONL files in `logs/`:
@@ -192,11 +200,22 @@ Results are saved to timestamped JSONL files in `logs/`:
 | Adversarial eval | `logs/adversarial_eval_YYYYMMDD_HHMMSS.jsonl` |
 | Golden FP check | `logs/golden_fp_check_YYYYMMDD_HHMMSS.jsonl` |
 
+#### Model selection
+
+The model is specified per-run via `--model` or resolved automatically from `--run-label` using `evals/run_config.json`. The model is passed explicitly to all pipeline agents; no environment variable is used.
+
+| Flag | Purpose | Example |
+|---|---|---|
+| `--model` | Pipeline model (provider:model format) | `--model openrouter:qwen/qwen3.5-9b` |
+| `--run-label` | Resolves model + PII from `evals/run_config.json` | `--run-label R52` |
+
+When both are provided, `--model` overrides the config lookup. When `--run-label` matches an entry in the config, `extended_pii` is also set automatically.
+
 #### Resilience
 
 Results append to JSONL after each query (survives crashes, hibernation, power loss).
 
-**Auto-resume:** Detects the latest partial JSONL in `logs/` and skips completed queries. Use `--no-resume` to force a fresh run.
+**Auto-resume:** When `--run-label` is provided, resume is scoped to files matching that label (prevents cross-run contamination). Use `--no-resume` to force a fresh run.
 
 **Per-query timeout:** Default 600s (`--query-timeout`). Timed-out queries logged as `"actual_outcome": "timeout"` and retried on next resume.
 
@@ -204,8 +223,6 @@ Results append to JSONL after each query (survives crashes, hibernation, power l
 
 | Variable | Purpose | Example |
 |---|---|---|
-| `PIPELINE_MODEL` | Override default LLM model | `openai:qwen/qwen3.5-9b` |
-| `OPENROUTER_RUN_TAG` | Tag API calls for cost attribution | `R08` |
 | `OPENROUTER_PROVIDER` | Provider routing preference (JSON) | `{"sort":"latency"}` |
 
 Provider preference examples: `{"sort":"latency"}`, `{"order":["Venice","Together"]}`, `{"ignore":["Together"]}`. See [OpenRouter provider routing docs](https://openrouter.ai/docs/guides/routing/provider-selection).
@@ -213,6 +230,27 @@ Provider preference examples: `{"sort":"latency"}`, `{"order":["Venice","Togethe
 Dataset: `evals/adversarial_queries.json` (generated with GPT-4o-mini and DeepSeek V3.2). Generators: `evals/generate_adversarial_queries.py`, `evals/generate_national_id_queries.py`. Golden queries: `evals/golden_queries.json`.
 
 Link to [blog post](https://www.nirmalya.net/posts/2026/03/multi-agent-text-to-sql-security-agent-failure/).
+
+#### Batch Runners
+
+Two scripts automate multi-run experiments with random spacing and per-run verification:
+
+| Script | Purpose |
+|---|---|
+| `scripts/run_sch_md.py` | Schema metadata injection (SCH-MD) experiment: 10 poisoned-schema queries per run across multiple models |
+| `scripts/run_variance.py` | Variance runs: full 269-query eval across 4 models with automatic Sec/QR/SchemaIntel verification |
+
+```bash
+# Schema metadata injection (dry run)
+.venv/Scripts/python.exe scripts/run_sch_md.py \
+    --runs 6-15 --dry-run
+
+# Variance runs (first batch, with verification)
+.venv/Scripts/python.exe scripts/run_variance.py \
+    --runs 21-29 --dry-run
+```
+
+Both scripts write per-run summaries to `logs/` (`sch_md_summary.txt` and `variance_summary.txt` respectively).
 
 ### LLM Configuration
 

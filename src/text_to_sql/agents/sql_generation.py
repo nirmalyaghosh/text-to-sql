@@ -56,14 +56,23 @@ class SQLGenerationAgent(BaseAgent):
     self-confirmation bias.
     """
 
-    def __init__(self):
+    def __init__(self, model: str | None = None):
         """
         Initialize the SQL Generation Agent.
+
+        Args:
+            model: LLM model identifier. When
+                None, uses DEFAULT_MODEL from
+                BaseAgent.
         """
         system_prompt = get_prompt("sql_generation")
-        super().__init__(
-            "SQL Generation", system_prompt
-        )
+        kwargs: dict = {
+            "agent_name": "SQL Generation",
+            "system_prompt": system_prompt,
+        }
+        if model:
+            kwargs["model"] = model
+        super().__init__(**kwargs)
         self._gen_agent = PydanticAgent(
             model=self.model,
             system_prompt=system_prompt,

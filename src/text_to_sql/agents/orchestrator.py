@@ -42,12 +42,23 @@ class OrchestratorAgent(BaseAgent):
     controller
     """
 
-    def __init__(self):
+    def __init__(self, model: str | None = None):
         """
         Initialize the Orchestrator Agent.
+
+        Args:
+            model: LLM model identifier. When
+                None, uses DEFAULT_MODEL from
+                BaseAgent.
         """
         system_prompt = get_prompt("orchestrator")
-        super().__init__("Orchestrator", system_prompt)
+        kwargs: dict = {
+            "agent_name": "Orchestrator",
+            "system_prompt": system_prompt,
+        }
+        if model:
+            kwargs["model"] = model
+        super().__init__(**kwargs)
         self.conversation_state = {}
         self.available_agents: Dict[str, Optional[BaseAgent]] = {
             "refinement": None,

@@ -40,14 +40,23 @@ class QueryRefinementAgent(BaseAgent):
     and validates that queries are within system capabilities.
     """
 
-    def __init__(self):
+    def __init__(self, model: str | None = None):
         """
         Initialize the Query Refinement Agent.
+
+        Args:
+            model: LLM model identifier. When
+                None, uses DEFAULT_MODEL from
+                BaseAgent.
         """
         system_prompt = get_prompt("query_refinement")
-        super().__init__(
-            "Query Refinement", system_prompt
-        )
+        kwargs: dict = {
+            "agent_name": "Query Refinement",
+            "system_prompt": system_prompt,
+        }
+        if model:
+            kwargs["model"] = model
+        super().__init__(**kwargs)
 
     async def _detect_ambiguity(
         self, query: str, user_context: Dict[str, Any]

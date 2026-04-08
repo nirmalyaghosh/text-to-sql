@@ -70,16 +70,21 @@ def _append_result(
 
 def _build_pipeline(
     extended_pii: bool = False,
+    model: str | None = None,
 ) -> OrchestratorAgent:
     """
     Helper function used to initialize and wire
     the 5-agent pipeline with a fresh state.
     """
-    orchestrator = OrchestratorAgent()
-    refinement = QueryRefinementAgent()
-    security = SecurityGovernanceAgent(extended_pii=extended_pii)
-    schema_intel = SchemaIntelligenceAgent()
-    sql_gen = SQLGenerationAgent()
+    orchestrator = OrchestratorAgent(model=model)
+    refinement = QueryRefinementAgent(model=model)
+    security = SecurityGovernanceAgent(
+        extended_pii=extended_pii, model=model,
+    )
+    schema_intel = SchemaIntelligenceAgent(
+        model=model,
+    )
+    sql_gen = SQLGenerationAgent(model=model)
 
     orchestrator.inject_agent(
         agent_name="refinement",
@@ -158,12 +163,16 @@ def _error_result(
 
 
 def _find_latest_partial(
-    prefix: str,
     expected_count: int,
+    prefix: str = "adversarial_eval",
+    run_label: str | None = None,
 ) -> tuple[Path | None, str | None, set[str]]:
     """
     Helper function used to find the latest partial
-    JSONL in logs/ for auto-resume. Returns
+    JSONL in logs/ for auto-resume. When run_label
+    is provided, only considers files whose first
+    record matches that label (prevents cross-run
+    contamination). Returns
     (path, run_id, completed_ids) or
     (None, None, set()) if no resumable file found.
     """
@@ -175,12 +184,16 @@ def _find_latest_partial(
     for path in candidates:
         ids = set()
         run_id = None
+        file_label = None
         with open(path, encoding="utf-8") as f:
             for line in f:
                 r = json.loads(line)
                 ids.add(r["id"])
                 if run_id is None:
                     run_id = r.get("run_id")
+                    file_label = r.get("run_label")
+        if run_label and file_label != run_label:
+            continue
         if len(ids) < expected_count:
             return path, run_id, ids
     return None, None, set()
@@ -421,11 +434,12 @@ def _save_results(
 
 async def run_adversarial_eval(
     extended_pii: bool = False,
-    query_timeout: int = 600,
+    model: str | None = None,
     no_resume: bool = False,
-    skip_schema_mod: bool = True,
     query_ids: list[str] | None = None,
+    query_timeout: int = 600,
     run_label: str | None = None,
+    skip_schema_mod: bool = True,
 ) -> None:
     """
     Run adversarial queries from
@@ -438,8 +452,16 @@ async def run_adversarial_eval(
 
     Args:
         extended_pii: Enable extended PII patterns
-        query_timeout: Per-query timeout in seconds
+        model: Pipeline model (e.g.
+            openrouter:qwen/qwen3.5-9b).
+            Required. Whitespace is stripped
+            to prevent API errors.
         no_resume: Force a fresh run
+        query_ids: When provided, only run
+            queries whose id is in this list
+        query_timeout: Per-query timeout in seconds
+        run_label: Human-readable label logged
+            alongside run ID
         skip_schema_mod: Skip queries whose
             adversarial_queries.json entry has
             requires_schema_modification=true
@@ -447,8 +469,6 @@ async def run_adversarial_eval(
             columns). Default True for backward
             compat; pass --no-skip-schema-mod
             when the adversarial schema is loaded
-        query_ids: When provided, only run
-            queries whose id is in this list
     """
     pii_label = "ON" if extended_pii else "OFF"
     logger.info("")
@@ -488,8 +508,8 @@ async def run_adversarial_eval(
 
     if not no_resume:
         rpath, rid, cids = _find_latest_partial(
-            prefix="adversarial_eval",
             expected_count=len(queries),
+            run_label=run_label,
         )
         if rpath and rid and cids:
             results_path = rpath
@@ -510,8 +530,8 @@ async def run_adversarial_eval(
     os.environ["OPENROUTER_RUN_TAG"] = f"txt2sql-adv-{run_id}"
     os.environ["OPENROUTER_RUN_LABEL"] = run_label or ""
 
+    model = model.strip()
     schema = os.environ.get("SCHEMA_FILE", "(default)")
-    model = os.environ.get("PIPELINE_MODEL", "(default)")
     qid_str = ",".join(query_ids) if query_ids else "(all)"
     label = f" ({run_label})" if run_label else ""
     logger.info(
@@ -578,6 +598,7 @@ async def run_adversarial_eval(
         try:
             orchestrator = _build_pipeline(
                 extended_pii=extended_pii,
+                model=model,
             )
             result = await asyncio.wait_for(
                 _run_query(
@@ -629,6 +650,7 @@ async def run_adversarial_eval(
 
 async def run_golden_fp_check(
     extended_pii: bool = False,
+    model: str | None = None,
 ) -> None:
     """
     Run golden queries through the pipeline
@@ -663,6 +685,7 @@ async def run_golden_fp_check(
         try:
             orchestrator = _build_pipeline(
                 extended_pii=extended_pii,
+                model=model,
             )
             result = await _run_query(
                 orchestrator=orchestrator,
@@ -792,6 +815,17 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help=(
+            "Pipeline model "
+            "(e.g. openrouter:qwen/qwen3.5-9b). "
+            "Optional if --run-label matches "
+            "an entry in evals/run_config.json."
+        ),
+    )
+    parser.add_argument(
         "--run-label",
         type=str,
         default=None,
@@ -805,10 +839,36 @@ if __name__ == "__main__":
     )
     load_dotenv()
 
+    # Resolve model and extended_pii from
+    # run_config.json when --run-label is provided
+    run_cfg = {}
+    cfg_path = EVALS_DIR / "run_config.json"
+    if cfg_path.exists():
+        with open(cfg_path, encoding="utf-8") as f:
+            run_cfg = json.load(f)
+
+    model = args.model
+    extended_pii = args.extended_pii
+    if args.run_label and args.run_label in run_cfg:
+        cfg = run_cfg[args.run_label]
+        if not model:
+            model = cfg["model"]
+        extended_pii = cfg.get(
+            "extended_pii", extended_pii,
+        )
+
+    if not model:
+        parser.error(
+            "--model is required (or use "
+            "--run-label matching an entry "
+            "in evals/run_config.json)"
+        )
+
     if args.golden_fp:
         asyncio.run(
             run_golden_fp_check(
-                extended_pii=args.extended_pii,
+                extended_pii=extended_pii,
+                model=model,
             )
         )
     else:
@@ -818,11 +878,12 @@ if __name__ == "__main__":
         )
         asyncio.run(
             run_adversarial_eval(
-                extended_pii=args.extended_pii,
+                extended_pii=extended_pii,
+                model=model,
                 no_resume=args.no_resume,
-                query_timeout=args.query_timeout,
-                skip_schema_mod=not args.no_skip_schema_mod,
                 query_ids=qids,
+                query_timeout=args.query_timeout,
                 run_label=args.run_label,
+                skip_schema_mod=not args.no_skip_schema_mod,
             )
         )
