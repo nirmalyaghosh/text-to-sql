@@ -142,6 +142,7 @@ class SQLGenerationAgent(BaseAgent):
                 generated_sql=f"[critique] valid={result.output.is_valid}",
                 trim_sql_preview=False,
                 generation_id=pids[0] if pids else "",
+                usage_details=usage.details or None,
             )
             return result.output
         except Exception as e:
@@ -514,6 +515,7 @@ class SQLGenerationAgent(BaseAgent):
                 },
                 generated_sql=result.output.sql,
                 generation_id=pids[0] if pids else "",
+                usage_details=usage.details or None,
             )
             return result.output
         except Exception as e:

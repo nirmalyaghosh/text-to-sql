@@ -603,6 +603,7 @@ class SchemaIntelligenceAgent(BaseAgent):
                 generated_sql="[entity_extraction]",
                 trim_sql_preview=False,
                 generation_id=gen_id,
+                usage_details=usage.details or None,
             )
             return result.output
         except Exception as e:

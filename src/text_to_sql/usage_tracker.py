@@ -126,6 +126,7 @@ def log_llm_response(
     trim_sql_preview: bool = False,
     purpose: str = "pipeline",
     generation_id: str = "",
+    usage_details: dict | None = None,
 ) -> None:
     """
     Log an LLM response with token usage.
@@ -136,13 +137,18 @@ def log_llm_response(
             generated_sql_preview =\
                 generated_sql[:PROMPT_PREVIEW_LENGTH] + "..."
 
+    id_key = (
+        "generation_id"
+        if generation_id.startswith("gen-")
+        else "provider_response_id"
+    )
     entry = {
         "event": "llm_response",
         "purpose": purpose,
         "request_id": request_id,
         "run_tag": _get_run_tag(),
         "run_label": _get_run_label(),
-        "generation_id": generation_id,
+        id_key: generation_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "question": question,
@@ -165,6 +171,8 @@ def log_llm_response(
             ),
         },
     }
+    if usage_details:
+        entry["usage_details"] = usage_details
     _write_entry(entry)
 
 

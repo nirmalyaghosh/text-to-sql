@@ -33,6 +33,27 @@ defaults:
 endpoints:
 
   # ---------------------------------------------------------------------------
+  # DeepSeek (direct)
+  # Source: https://api-docs.deepseek.com/quick_start/pricing
+  # ---------------------------------------------------------------------------
+  deepseek-v3.2:
+    provider: deepseek
+    model: deepseek-chat
+    api_key_env: DEEPSEEK_API_KEY
+    context_window: 128000  # https://api-docs.deepseek.com/quick_start/pricing
+    base_url: https://api.deepseek.com
+    cost:
+      input_per_1m: 0.28
+      output_per_1m: 0.42
+      pricing_url: https://api-docs.deepseek.com/quick_start/pricing
+      pricing_checked: "2026-04-06"
+      pricing_notes: "Cache miss rate. Cache hit: $0.028/1M input (10x discount)."
+    notes: >
+      deepseek-chat maps to DeepSeek-V3.2 (non-thinking mode).
+      671B/37B MoE. Same model as openrouter-deepseek-v3.2.
+      Source: https://api-docs.deepseek.com/quick_start/pricing
+
+  # ---------------------------------------------------------------------------
   # OpenAI (direct)
   # Source: https://openai.com/api/pricing/
   # ---------------------------------------------------------------------------
