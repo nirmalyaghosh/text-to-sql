@@ -71,8 +71,9 @@ class BaseAgent(ABC):
         run_tag = os.environ.get("OPENROUTER_RUN_TAG", "")
         if run_tag:
             extra_body["user"] = run_tag
-        if OPENROUTER_PROVIDER:
-            extra_body["provider"] = json.loads(OPENROUTER_PROVIDER)
+        provider = os.environ.get("OPENROUTER_PROVIDER", "")
+        if provider:
+            extra_body["provider"] = json.loads(provider)
         self._model_settings = (
             {"extra_body": extra_body} if extra_body else None
         )
