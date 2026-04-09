@@ -239,6 +239,26 @@ Two scripts automate multi-run experiments with random spacing and per-run verif
 |---|---|
 | `scripts/run_sch_md.py` | Schema metadata injection (SCH-MD) experiment: 10 poisoned-schema queries per run across multiple models |
 | `scripts/run_variance.py` | Variance runs: full 269-query eval across 4 models with automatic Sec/QR/SchemaIntel verification |
+| `scripts/embedding_classifier.py` | Embedding-based adversarial query classifier. Embeds queries with a sentence-transformer, then trains a logistic regression and reports detection rates via 5-fold stratified cross-validation. Outputs: classification report, per-fold adversarial recall, and a threshold sweep (0.3/0.5/0.7/0.9) with precision, recall, F1, and FPR. `--model` swaps the embedding model (default: `BAAI/bge-m3`), `--dim` truncates to N dimensions after re-normalising (Matryoshka). `--cache-only` and `--skip-embed` are mutually exclusive: the former computes and caches embeddings then exits; the latter loads cached embeddings and skips recomputation. Env: `EMBED_CACHE_DIR` for `.npy` cache location (default: `evals/embeddings/`), `HF_HOME` for HuggingFace model weights cache |
+
+```bash
+# Embed with default model and run classifier
+uv run python scripts/embedding_classifier.py
+
+# Embed only (no classification) - useful for pre-caching
+uv run python scripts/embedding_classifier.py --cache-only
+
+# Run classifier on cached embeddings
+uv run python scripts/embedding_classifier.py --skip-embed
+
+# Use a different model
+uv run python scripts/embedding_classifier.py \
+    --model BAAI/bge-large-en-v1.5
+
+# Use cached embeddings, truncated to 256 dims (Matryoshka)
+uv run python scripts/embedding_classifier.py \
+    --skip-embed --dim 256
+```
 
 ```bash
 # Schema metadata injection (dry run)

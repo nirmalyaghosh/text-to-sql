@@ -9,3 +9,6 @@ logs/
 
 dist/
 build/
+
+evals/ablation_*.jsonl
+evals/embeddings/
