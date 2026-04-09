@@ -74,7 +74,7 @@ class SQLGenerationAgent(BaseAgent):
             kwargs["model"] = model
         super().__init__(**kwargs)
         self._gen_agent = PydanticAgent(
-            model=self.model,
+            model=self._resolved_model,
             system_prompt=system_prompt,
             output_type=GeneratedSQL,
             model_settings=self._model_settings,
@@ -83,7 +83,7 @@ class SQLGenerationAgent(BaseAgent):
             "sql_critique"
         )
         self._critique_agent = PydanticAgent(
-            model=self.model,
+            model=self._resolved_model,
             system_prompt=self._critique_prompt,
             output_type=SQLCritique,
             model_settings=self._model_settings,

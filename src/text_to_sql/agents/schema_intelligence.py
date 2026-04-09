@@ -98,7 +98,7 @@ class SchemaIntelligenceAgent(BaseAgent):
             init_kwargs["model"] = model
         super().__init__(**init_kwargs)
         self._entity_agent = PydanticAgent(
-            model=self.model,
+            model=self._resolved_model,
             system_prompt=system_prompt,
             output_type=EntityExtraction,
             model_settings=self._model_settings,

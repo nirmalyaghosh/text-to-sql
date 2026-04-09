@@ -15,11 +15,14 @@ from typing import (
     Dict,
     List,
     Optional,
+    Union,
 )
 
 import tiktoken
 
 from pydantic_ai import Agent as PydanticAgent
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from text_to_sql.agents.types import (
     ExecutionChainStep,
@@ -72,13 +75,19 @@ class BaseAgent(ABC):
         if run_tag:
             extra_body["user"] = run_tag
         provider = os.environ.get("OPENROUTER_PROVIDER", "")
-        if provider:
+        if provider and model.startswith("openrouter:"):
             extra_body["provider"] = json.loads(provider)
-        self._model_settings = (
-            {"extra_body": extra_body} if extra_body else None
-        )
+        settings = {}
+        if extra_body:
+            settings["extra_body"] = extra_body
+        if model.startswith("self-hosted:"):
+            settings["timeout"] = int(os.environ.get(
+                "SELF_HOSTED_TIMEOUT", "180",
+            ))
+        self._model_settings = settings or None
+        self._resolved_model = self._resolve_model(self.model)
         self.pydantic_agent = PydanticAgent(
-            model=self.model,
+            model=self._resolved_model,
             system_prompt=system_prompt,
             model_settings=self._model_settings,
         )
@@ -181,6 +190,37 @@ class BaseAgent(ABC):
             Agent-specific output dictionary
         """
         pass
+
+    @staticmethod
+    def _resolve_model(
+        model: str,
+    ) -> Union[str, OpenAIModel]:
+        """
+        Helper function used to resolve a model
+        string to a Pydantic AI model. Handles
+        the 'self-hosted:' prefix by creating
+        an OpenAI-compatible model pointed at
+        the SELF_HOSTED_BASE_URL endpoint.
+        """
+        prefix = "self-hosted:"
+        if not model.startswith(prefix):
+            return model
+        base_url = os.environ.get(
+            "SELF_HOSTED_BASE_URL", "",
+        )
+        if not base_url:
+            raise EnvironmentError(
+                "SELF_HOSTED_BASE_URL env var"
+                " required for self-hosted:"
+                " models"
+            )
+        return OpenAIModel(
+            model_name=model[len(prefix):],
+            provider=OpenAIProvider(
+                base_url=base_url,
+                api_key="not-needed",
+            ),
+        )
 
     def create_execution_step(
         self,

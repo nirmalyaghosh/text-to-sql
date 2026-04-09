@@ -141,6 +141,21 @@ endpoints:
       pricing_url: https://openrouter.ai/models/google/gemini-3.1-flash-lite-preview
       pricing_checked: "2026-04-03"
 
+  openrouter-gemma-4-26b:
+    provider: openrouter
+    model: google/gemma-4-26b-a4b-it
+    api_key_env: OPENROUTER_API_KEY
+    context_window: 262144  # https://openrouter.ai/google/gemma-4-26b-a4b-it
+    base_url: https://openrouter.ai/api/v1
+    cost:
+      input_per_1m: 0.13
+      output_per_1m: 0.40
+      pricing_url: https://openrouter.ai/google/gemma-4-26b-a4b-it
+      pricing_checked: "2026-04-09"
+    notes: >
+      Gemma 4 26B MoE (25.2B total, 3.8B active per token).
+      128 experts, 8 active + 1 shared. Open-weight.
+      Source: https://ai.google.dev/gemma/docs/core/model_card_4
 
   openrouter-glm-4.7-flash:
     provider: openrouter
@@ -297,6 +312,16 @@ endpoints:
       output_per_1m: 0.30
       pricing_url: https://openrouter.ai/models/bytedance-seed/seed-2.0-mini
       pricing_checked: "2026-04-03"
+
+  self-hosted-gemma-4-26b:
+    provider: openai
+    model: gemma4:26b
+    api_key_env: OPENAI_API_KEY
+    context_window: 32768  # Matches --max-model-len on Ollama
+    notes: >
+      Self-hosted Gemma 4 26B MoE via Ollama.
+      Entry exists for context_window lookup only.
+      Actual endpoint resolved via SELF_HOSTED_BASE_URL.
 
 # -----------------------------------------------------------------------------
 # Roles: map logical roles to endpoint names
