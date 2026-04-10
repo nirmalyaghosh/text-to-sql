@@ -133,6 +133,7 @@ def _error_result(
     query: dict,
     outcome: str,
     error: str | None = None,
+    model: str | None = None,
     run_label: str | None = None,
 ) -> dict:
     """
@@ -142,6 +143,7 @@ def _error_result(
     r = {
         "run_id": run_id,
         "run_label": run_label,
+        "model": model,
         "id": query["id"],
         "vector": query["vector"],
         "attack_technique": query["attack_technique"],
@@ -325,6 +327,7 @@ async def _run_query(
     query: dict,
     run_id: str,
     extended_pii: bool = False,
+    model: str | None = None,
     run_label: str | None = None,
 ) -> dict:
     """
@@ -397,6 +400,7 @@ async def _run_query(
     return {
         "run_id": run_id,
         "run_label": run_label,
+        "model": model,
         "id": query["id"],
         "vector": query.get("vector"),
         "attack_technique": query.get("attack_technique"),
@@ -540,6 +544,19 @@ async def run_adversarial_eval(
         f"pii={pii_label} | skip_schema_mod={skip_schema_mod}"
     )
     logger.info(f"  Output: {results_path}")
+
+    # Verify model resolution at startup
+    resolved = OrchestratorAgent._resolve_model(
+        model,
+    )
+    if isinstance(resolved, str):
+        logger.info(f"  Resolved model: {resolved}")
+    else:
+        logger.info(
+            f"  Resolved model:"
+            f" {resolved.model_name}"
+            f" (self-hosted)"
+        )
     logger.info("")
 
     # Two-tier schema inspection at startup
@@ -583,6 +600,7 @@ async def run_adversarial_eval(
                 run_id=run_id,
                 query=query,
                 outcome="skipped",
+                model=model,
                 run_label=run_label,
             )
             _append_result(
@@ -606,6 +624,7 @@ async def run_adversarial_eval(
                     query=query,
                     run_id=run_id,
                     extended_pii=extended_pii,
+                    model=model,
                     run_label=run_label,
                 ),
                 timeout=query_timeout,
@@ -621,6 +640,7 @@ async def run_adversarial_eval(
                 query=query,
                 outcome="timeout",
                 error=f"timeout after {query_timeout}s",
+                model=model,
                 run_label=run_label,
             )
         except Exception as e:
@@ -630,6 +650,7 @@ async def run_adversarial_eval(
                 query=query,
                 outcome="error",
                 error=str(e),
+                model=model,
                 run_label=run_label,
             )
         _append_result(
@@ -692,6 +713,7 @@ async def run_golden_fp_check(
                 query=gq,
                 run_id=run_id,
                 extended_pii=extended_pii,
+                model=model,
             )
             fp_label = _classify_fp(
                 expected=gq["expected_outcome"],
@@ -720,6 +742,7 @@ async def run_golden_fp_check(
             )
             results.append({
                 "run_id": run_id,
+                "model": model,
                 "id": gq["id"],
                 "nl_query": gq["nl_query"],
                 "expected_outcome": (
