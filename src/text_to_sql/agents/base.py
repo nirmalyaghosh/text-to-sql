@@ -57,6 +57,7 @@ class BaseAgent(ABC):
         agent_name: str,
         system_prompt: str,
         model: str = DEFAULT_MODEL,
+        temperature: float = 0.0,
     ):
         """
         Initialize a base agent.
@@ -66,6 +67,8 @@ class BaseAgent(ABC):
             (e.g., "Orchestrator", "Security")
             system_prompt: Pydantic AI system prompt
             model: LLM model identifier
+            temperature: Temperature for LLM calls
+                (default 0.0 for deterministic output)
         """
         self.agent_name = agent_name
         self.system_prompt = system_prompt
@@ -77,14 +80,14 @@ class BaseAgent(ABC):
         provider = os.environ.get("OPENROUTER_PROVIDER", "")
         if provider and model.startswith("openrouter:"):
             extra_body["provider"] = json.loads(provider)
-        settings = {}
+        settings = {"temperature": temperature}
         if extra_body:
             settings["extra_body"] = extra_body
         if model.startswith("self-hosted:"):
             settings["timeout"] = int(os.environ.get(
                 "SELF_HOSTED_TIMEOUT", "180",
             ))
-        self._model_settings = settings or None
+        self._model_settings = settings
         self._resolved_model = self._resolve_model(self.model)
         self.pydantic_agent = PydanticAgent(
             model=self._resolved_model,
@@ -191,37 +194,6 @@ class BaseAgent(ABC):
         """
         pass
 
-    @staticmethod
-    def _resolve_model(
-        model: str,
-    ) -> Union[str, OpenAIModel]:
-        """
-        Helper function used to resolve a model
-        string to a Pydantic AI model. Handles
-        the 'self-hosted:' prefix by creating
-        an OpenAI-compatible model pointed at
-        the SELF_HOSTED_BASE_URL endpoint.
-        """
-        prefix = "self-hosted:"
-        if not model.startswith(prefix):
-            return model
-        base_url = os.environ.get(
-            "SELF_HOSTED_BASE_URL", "",
-        )
-        if not base_url:
-            raise EnvironmentError(
-                "SELF_HOSTED_BASE_URL env var"
-                " required for self-hosted:"
-                " models"
-            )
-        return OpenAIModel(
-            model_name=model[len(prefix):],
-            provider=OpenAIProvider(
-                base_url=base_url,
-                api_key="not-needed",
-            ),
-        )
-
     def create_execution_step(
         self,
         action: str,
@@ -282,3 +254,34 @@ class BaseAgent(ABC):
         except Exception:
             pass
         return ids
+
+    @staticmethod
+    def _resolve_model(
+        model: str,
+    ) -> Union[str, OpenAIModel]:
+        """
+        Helper function used to resolve a model
+        string to a Pydantic AI model. Handles
+        the 'self-hosted:' prefix by creating
+        an OpenAI-compatible model pointed at
+        the SELF_HOSTED_BASE_URL endpoint.
+        """
+        prefix = "self-hosted:"
+        if not model.startswith(prefix):
+            return model
+        base_url = os.environ.get(
+            "SELF_HOSTED_BASE_URL", "",
+        )
+        if not base_url:
+            raise EnvironmentError(
+                "SELF_HOSTED_BASE_URL env var"
+                " required for self-hosted:"
+                " models"
+            )
+        return OpenAIModel(
+            model_name=model[len(prefix):],
+            provider=OpenAIProvider(
+                base_url=base_url,
+                api_key="not-needed",
+            ),
+        )
