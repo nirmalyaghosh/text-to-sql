@@ -54,6 +54,27 @@ endpoints:
       Source: https://api-docs.deepseek.com/quick_start/pricing
 
   # ---------------------------------------------------------------------------
+  # MiniMax (direct)
+  # Source: https://platform.minimax.io/docs/api-reference/text-openai-api
+  # ---------------------------------------------------------------------------
+  minimax-m2.5:
+    provider: openai
+    model: MiniMax-M2.5
+    api_key_env: MINIMAX_API_KEY
+    context_window: 204800  # https://platform.minimax.io/docs/api-reference/api-overview
+    base_url: https://api.minimax.io/v1
+    cost:
+      input_per_1m: 0.30
+      output_per_1m: 1.20
+      pricing_url: https://platform.minimax.io/docs/guides/pricing-paygo
+      pricing_checked: "2026-04-12"
+      pricing_notes: "Direct API ~2.5x more expensive than OpenRouter ($0.118/$0.472)."
+    notes: >
+      MiniMax-M2.5 via direct API (OpenAI-compatible).
+      Entry exists for context_window lookup.
+      Actual endpoint resolved via minimax: prefix in base.py.
+
+  # ---------------------------------------------------------------------------
   # OpenAI (direct)
   # Source: https://openai.com/api/pricing/
   # ---------------------------------------------------------------------------

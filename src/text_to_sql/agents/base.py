@@ -80,6 +80,8 @@ class BaseAgent(ABC):
         provider = os.environ.get("OPENROUTER_PROVIDER", "")
         if provider and model.startswith("openrouter:"):
             extra_body["provider"] = json.loads(provider)
+        if temperature < 0.01 and model.startswith("minimax:"):
+            temperature = 0.01
         settings = {"temperature": temperature}
         if extra_body:
             settings["extra_body"] = extra_body
@@ -262,10 +264,21 @@ class BaseAgent(ABC):
         """
         Helper function used to resolve a model
         string to a Pydantic AI model. Handles
-        the 'self-hosted:' prefix by creating
-        an OpenAI-compatible model pointed at
-        the SELF_HOSTED_BASE_URL endpoint.
+        'minimax:' and 'self-hosted:' prefixes
+        by creating OpenAI-compatible models
+        pointed at the appropriate endpoint.
         """
+        if model.startswith("minimax:"):
+            api_key = os.environ.get("MINIMAX_API_KEY", "")
+            if not api_key:
+                raise EnvironmentError("MINIMAX_API_KEY env var required for minimax: models")
+            return OpenAIModel(
+                model_name=model[len("minimax:"):],
+                provider=OpenAIProvider(
+                    base_url="https://api.minimax.io/v1",
+                    api_key=api_key,
+                ),
+            )
         prefix = "self-hosted:"
         if not model.startswith(prefix):
             return model
