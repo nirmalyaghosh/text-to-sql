@@ -75,6 +75,27 @@ endpoints:
       Actual endpoint resolved via minimax: prefix in base.py.
 
   # ---------------------------------------------------------------------------
+  # Z.AI / Zhipu (direct)
+  # Source: https://docs.z.ai/guides/overview/quick-start
+  # ---------------------------------------------------------------------------
+  z-ai-glm-4.7-flash:
+    provider: openai
+    model: glm-4.7-flash
+    api_key_env: Z_AI_API_KEY
+    context_window: 202752  # https://huggingface.co/zai-org/GLM-4.7-Flash/blob/main/config.json
+    base_url: https://api.z.ai/api/paas/v4/
+    cost:
+      input_per_1m: 0.00
+      output_per_1m: 0.00
+      pricing_url: https://docs.z.ai/guides/overview/pricing
+      pricing_checked: "2026-04-15"
+      pricing_notes: "Free tier (1 concurrent request). Paid tier TBD."
+    notes: >
+      GLM-4.7-Flash via direct Z.AI API (OpenAI-compatible).
+      30B/3.6B MoE with MLA architecture.
+      Actual endpoint resolved via z-ai: prefix in base.py.
+
+  # ---------------------------------------------------------------------------
   # OpenAI (direct)
   # Source: https://openai.com/api/pricing/
   # ---------------------------------------------------------------------------

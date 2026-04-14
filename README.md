@@ -206,7 +206,7 @@ The model is specified per-run via `--model` or resolved automatically from `--r
 
 | Flag | Purpose | Example |
 |---|---|---|
-| `--model` | Pipeline model (provider:model format) | `--model openrouter:qwen/qwen3.5-9b` |
+| `--model` | Pipeline model (provider:model format) | `--model openrouter:qwen/qwen3.5-9b`, `--model z-ai:glm-4.7-flash` |
 | `--run-label` | Resolves model + PII from `evals/run_config.json` | `--run-label R52` |
 
 When both are provided, `--model` overrides the config lookup. When `--run-label` matches an entry in the config, `extended_pii` is also set automatically.
