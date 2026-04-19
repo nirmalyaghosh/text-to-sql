@@ -586,6 +586,31 @@ class SchemaIntelligenceAgent(BaseAgent):
                 user_prompt=prompt,
                 question=query,
             )
+            if self._zai_client:
+                output, meta = (
+                    await self._zai_structured_call(
+                        system_prompt=self.system_prompt,
+                        user_prompt=prompt,
+                        output_type=EntityExtraction,
+                    )
+                )
+                pid = meta["provider_id"]
+                self._last_provider_ids = (
+                    [pid] if pid else []
+                )
+                log_llm_response(
+                    request_id=request_id,
+                    model=self.model,
+                    question=query,
+                    usage={
+                        "input_tokens": meta["input_tokens"],
+                        "output_tokens": meta["output_tokens"],
+                    },
+                    generated_sql="[entity_extraction]",
+                    trim_sql_preview=False,
+                    generation_id=pid,
+                )
+                return output
             result = await self._entity_agent.run(
                 prompt
             )
@@ -608,8 +633,9 @@ class SchemaIntelligenceAgent(BaseAgent):
             return result.output
         except Exception as e:
             logger.warning(
-                f"LLM entity extraction failed: {e}. "
-                f"Falling back to keyword matching."
+                f"LLM entity extraction failed:"
+                f" {type(e).__name__}: {e}."
+                f" Falling back to keyword matching."
             )
             return self._fallback_extraction(
                 query, available_tables

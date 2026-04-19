@@ -134,6 +134,30 @@ class SQLGenerationAgent(BaseAgent):
                 user_prompt=prompt,
                 question=query,
             )
+            if self._zai_client:
+                output, meta = (
+                    await self._zai_structured_call(
+                        system_prompt=self._critique_prompt,
+                        user_prompt=prompt,
+                        output_type=SQLCritique,
+                    )
+                )
+                pid = meta["provider_id"]
+                if pid:
+                    self._provider_ids.append(pid)
+                log_llm_response(
+                    request_id=request_id,
+                    model=self.model,
+                    question=query,
+                    usage={
+                        "input_tokens": meta["input_tokens"],
+                        "output_tokens": meta["output_tokens"],
+                    },
+                    generated_sql=f"[critique] valid={output.is_valid}",
+                    trim_sql_preview=False,
+                    generation_id=pid,
+                )
+                return output
             result = await self._critique_agent.run(
                 prompt
             )
@@ -508,6 +532,29 @@ class SQLGenerationAgent(BaseAgent):
                 user_prompt=prompt,
                 question=query,
             )
+            if self._zai_client:
+                output, meta = (
+                    await self._zai_structured_call(
+                        system_prompt=self.system_prompt,
+                        user_prompt=prompt,
+                        output_type=GeneratedSQL,
+                    )
+                )
+                pid = meta["provider_id"]
+                if pid:
+                    self._provider_ids.append(pid)
+                log_llm_response(
+                    request_id=request_id,
+                    model=self.model,
+                    question=query,
+                    usage={
+                        "input_tokens": meta["input_tokens"],
+                        "output_tokens": meta["output_tokens"],
+                    },
+                    generated_sql=output.sql,
+                    generation_id=pid,
+                )
+                return output
             result = await self._gen_agent.run(
                 prompt
             )
@@ -529,7 +576,8 @@ class SQLGenerationAgent(BaseAgent):
             return result.output
         except Exception as e:
             logger.error(
-                f"SQL generation LLM failed: {e}"
+                f"SQL generation LLM failed:"
+                f" {type(e).__name__}: {e}"
             )
             return None
 

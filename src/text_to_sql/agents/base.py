@@ -2,6 +2,7 @@
 Base Agent class with common functionality for all agents.
 """
 
+import asyncio
 import json
 import os
 import time
@@ -20,8 +21,10 @@ from typing import (
 
 import tiktoken
 
+from openai import AsyncOpenAI
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from text_to_sql.agents.types import (
@@ -85,6 +88,8 @@ class BaseAgent(ABC):
             or model.startswith("z-ai:")
         ):
             temperature = 0.01
+        if model.startswith("z-ai:glm-4.5") or model.startswith("z-ai:glm-4.6"):
+            extra_body["thinking"] = {"type": "disabled"}
         settings = {"temperature": temperature}
         if extra_body:
             settings["extra_body"] = extra_body
@@ -102,6 +107,16 @@ class BaseAgent(ABC):
         self._encoder = tiktoken.encoding_for_model(
             "gpt-4o-mini"
         )
+        self._zai_client: Optional[AsyncOpenAI] = None
+        self._zai_temperature = temperature
+        if model.startswith("z-ai:"):
+            api_key = os.environ.get("Z_AI_API_KEY", "")
+            self._zai_client = AsyncOpenAI(
+                base_url="https://api.z.ai/api/paas/v4/",
+                api_key=api_key,
+                max_retries=5,
+                timeout=60,
+            )
         logger.info(f"Initialized {agent_name}")
 
     async def execute(
@@ -131,6 +146,7 @@ class BaseAgent(ABC):
             duration_ms = (time.time() - start_time) * 1000
             logger.info(f"{self.agent_name} executed successfully "
                         f"in {duration_ms:.2f}ms")
+            await asyncio.sleep(float(os.environ.get("LLM_CALL_DELAY", "0")))
             return result
         except Exception as e:
             duration_ms = (time.time() - start_time) * 1000
@@ -183,6 +199,67 @@ class BaseAgent(ABC):
             Token count
         """
         return len(self._encoder.encode(text))
+
+    async def _zai_structured_call(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        output_type: type,
+    ) -> Any:
+        """
+        Helper function used to call Z.AI's API
+        directly via the OpenAI SDK, bypassing
+        pydantic-ai. Embeds the JSON schema in the
+        system prompt and parses the response into
+        the given Pydantic model.
+
+        Args:
+            system_prompt: System prompt for the call
+            user_prompt: User prompt for the call
+            output_type: Pydantic model class to parse
+                the response into
+
+        Returns:
+            Parsed Pydantic model instance
+
+        Raises:
+            ValueError: If JSON parsing or validation
+                fails
+        """
+        schema_str = json.dumps(output_type.model_json_schema())
+        full_system = (
+            f"{system_prompt}\n\n"
+            f"Always respond with a JSON object "
+            f"matching this schema:\n\n"
+            f"{schema_str}\n\n"
+            f"Return ONLY valid JSON. No markdown "
+            f"fencing, no explanation outside the "
+            f"JSON object."
+        )
+        bare_model = self.model[len("z-ai:"):]
+        response = await self._zai_client.chat.completions.create(
+            model=bare_model,
+            messages=[
+                {"role": "system", "content": full_system},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self._zai_temperature,
+        )
+        content = response.choices[0].message.content
+        if content.startswith("```"):
+            content = content.split("\n", 1)[-1]
+            content = content.rsplit("```", 1)[0].strip()
+        parsed = json.loads(content)
+        usage = response.usage
+        return output_type.model_validate(parsed), {
+            "input_tokens": (
+                usage.prompt_tokens if usage else 0
+            ),
+            "output_tokens": (
+                usage.completion_tokens if usage else 0
+            ),
+            "provider_id": response.id or "",
+        }
 
     @abstractmethod
     async def _execute_internal(
@@ -286,11 +363,20 @@ class BaseAgent(ABC):
             api_key = os.environ.get("Z_AI_API_KEY", "")
             if not api_key:
                 raise EnvironmentError("Z_AI_API_KEY env var required for z-ai: models")
+            async_client = AsyncOpenAI(
+                base_url="https://api.z.ai/api/paas/v4/",
+                api_key=api_key,
+                max_retries=5,
+                timeout=60,
+            )
             return OpenAIModel(
                 model_name=model[len("z-ai:"):],
                 provider=OpenAIProvider(
-                    base_url="https://api.z.ai/api/paas/v4/",
-                    api_key=api_key,
+                    openai_client=async_client,
+                ),
+                profile=OpenAIModelProfile(
+                    default_structured_output_mode='prompted',
+                    supports_json_object_output=False,
                 ),
             )
         prefix = "self-hosted:"
