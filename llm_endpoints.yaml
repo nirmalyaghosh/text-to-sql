@@ -355,6 +355,32 @@ endpoints:
       pricing_url: https://openrouter.ai/models/bytedance-seed/seed-2.0-mini
       pricing_checked: "2026-04-03"
 
+  # -----------------------------------------------------------------
+  # Self-hosted models (Ollama on vast.ai)
+  #
+  # VRAM budget (Q4_K_M quantisation):
+  #   Model              Params (active)  Q4_K_M   Min GPU
+  #   Qwen3.5-9B          9B  (dense)     ~6 GB    12 GB (RTX 3060)
+  #   Mistral Nemo        12B (dense)     ~9 GB    12 GB (RTX 3060)
+  #   Gemma4:26b         25B  (3.8B MoE) ~18 GB    24 GB (RTX 3090)
+  #   GLM-4.7-Flash      30B  (3.6B MoE) ~19 GB    24 GB (RTX 3090)
+  #   Qwen3-32B          32B  (dense)    ~20 GB    24 GB (RTX 3090)
+  #
+  # For sustained benchmark runs, prefer a card with 50%+ headroom
+  # over Q4_K_M size to leave room for KV cache.
+  # -----------------------------------------------------------------
+
+  self-hosted-glm-4.7-flash:
+    provider: openai
+    model: glm-4.7-flash
+    api_key_env: OPENAI_API_KEY
+    context_window: 32768  # Conservative default for Ollama
+    notes: >
+      Self-hosted GLM-4.7-Flash 30B MoE (3.6B active)
+      via Ollama. Entry exists for context_window
+      lookup only. Actual endpoint resolved via
+      SELF_HOSTED_BASE_URL.
+
   self-hosted-gemma-4-26b:
     provider: openai
     model: gemma4:26b
@@ -362,6 +388,16 @@ endpoints:
     context_window: 32768  # Matches --max-model-len on Ollama
     notes: >
       Self-hosted Gemma 4 26B MoE via Ollama.
+      Entry exists for context_window lookup only.
+      Actual endpoint resolved via SELF_HOSTED_BASE_URL.
+
+  self-hosted-qwen3.5-9b:
+    provider: openai
+    model: qwen3.5:9b
+    api_key_env: OPENAI_API_KEY
+    context_window: 32768  # Conservative default for Ollama
+    notes: >
+      Self-hosted Qwen 3.5 9B via Ollama.
       Entry exists for context_window lookup only.
       Actual endpoint resolved via SELF_HOSTED_BASE_URL.
 
