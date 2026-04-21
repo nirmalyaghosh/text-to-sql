@@ -50,7 +50,7 @@ def setup_logging(level: int = logging.INFO):
     file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter("%(message)s"))
+    console_handler.setFormatter(logging.Formatter("%(name)s | %(message)s"))
 
     root = logging.getLogger()
     root.setLevel(level)

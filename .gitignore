@@ -12,3 +12,8 @@ build/
 
 evals/ablation_*.jsonl
 evals/embeddings/
+evals/run_config.json
+
+*.code-workspace
+.coverage
+*.lock

@@ -239,7 +239,17 @@ Two scripts automate multi-run experiments with random spacing and per-run verif
 |---|---|
 | `scripts/run_sch_md.py` | Schema metadata injection (SCH-MD) experiment: 10 poisoned-schema queries per run across multiple models |
 | `scripts/run_variance.py` | Variance runs: full 269-query eval across 4 models with automatic Sec/QR/SchemaIntel verification |
-| `scripts/embedding_classifier.py` | Embedding-based adversarial query classifier. Embeds queries with a sentence-transformer, then trains a logistic regression and reports detection rates via 5-fold stratified cross-validation. Outputs: classification report, per-fold adversarial recall, and a threshold sweep (0.3/0.5/0.7/0.9) with precision, recall, F1, and FPR. `--model` swaps the embedding model (default: `BAAI/bge-m3`), `--dim` truncates to N dimensions after re-normalising (Matryoshka). `--cache-only` and `--skip-embed` are mutually exclusive: the former computes and caches embeddings then exits; the latter loads cached embeddings and skips recomputation. Env: `EMBED_CACHE_DIR` for `.npy` cache location (default: `evals/embeddings/`), `HF_HOME` for HuggingFace model weights cache |
+| `scripts/embedding_classifier.py` | Embedding-based adversarial query classifier. Trains a logistic regression on sentence-transformer embeddings and reports detection rates via 5-fold CV |
+
+The scripts (`scripts/run_sch_md.py` and `scripts/run_variance.py`) write per-run summaries to `logs/` (`sch_md_summary.txt` and `variance_summary.txt` respectively).
+
+**Embedding Classifier**
+
+The `scripts/embedding_classifier.py` was used in the blog post, *[Where The Security Agent Fails](https://www.nirmalya.net/posts/2026/04/multi-agent-text-to-sql-security-agent-failure/#could-an-embedding-classifier-replace-keyword-matching)*, to compare three models:
+- `BAAI/bge-m3` (568M params, 1024-dim, multilingual, Beijing Academy of AI),
+- `Qwen3-Embedding-0.6B` (Alibaba),
+- `nomic-embed-text-v1.5` (137M params)
+All three support [Matryoshka Representation Learning](https://huggingface.co/blog/matryoshka) - the embedding is trained so that any leading N dimensions form a meaningful lower-dimensional vector on their own, meaning you can truncate and re-normalise with minimal accuracy loss. `--dim N` exploits this (e.g. `--dim 768` was used for a fair cross-model comparison). `--cache-only` and `--skip-embed` are mutually exclusive. Env: `EMBED_CACHE_DIR` for `.npy` cache (default: `evals/embeddings/`), `HF_HOME` for model weights.
 
 ```bash
 # Embed with default model and run classifier
@@ -269,8 +279,6 @@ uv run python scripts/embedding_classifier.py \
 .venv/Scripts/python.exe scripts/run_variance.py \
     --runs 21-29 --dry-run
 ```
-
-Both scripts write per-run summaries to `logs/` (`sch_md_summary.txt` and `variance_summary.txt` respectively).
 
 ### LLM Configuration
 
