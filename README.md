@@ -224,6 +224,8 @@ Results append to JSONL after each query (survives crashes, hibernation, power l
 | Variable | Purpose | Example |
 |---|---|---|
 | `OPENROUTER_PROVIDER` | Provider routing preference (JSON) | `{"sort":"latency"}` |
+| `LRL_RUN_TAG` | Stamped on every JSONL ledger event | `R149` |
+| `LRL_RUN_LABEL` | Human-readable run description in JSONL | `GLM-4.7 temp=0 run 3` |
 
 Provider preference examples: `{"sort":"latency"}`, `{"order":["Venice","Together"]}`, `{"ignore":["Together"]}`. See [OpenRouter provider routing docs](https://openrouter.ai/docs/guides/routing/provider-selection).
 
@@ -282,13 +284,19 @@ uv run python scripts/embedding_classifier.py \
 
 ### LLM Configuration
 
-Endpoint definitions (provider, model, API key env var, pricing) live in `llm_endpoints.yaml`. The config loader at `src/text_to_sql/llm_config.py` validates and resolves them:
+Endpoint definitions (provider, model, API key env var, pricing) live in `llm_endpoints.yaml`. The `llm-router-ledger` library validates and resolves them:
 
 ```python
-from text_to_sql.llm_config import get_client, get_model_name
+from llm_router_ledger import load_config, send_message, UsageTracker
 
-client = get_client("openai-gpt4o-mini")
-model = get_model_name("openai-gpt4o-mini")
+config = load_config()                       # reads llm_endpoints.yaml
+text, usage, gen_id = send_message(
+    endpoint_name="openrouter-mimo-v2-flash",
+    system="You are concise.",
+    user="Explain schema pruning in two sentences.",
+    tracker=tracker,                         # optional; logs to JSONL when set
+    config=config,
+)
 ```
 
 See `env.example` for required API key variables.

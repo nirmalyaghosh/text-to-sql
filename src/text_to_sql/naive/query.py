@@ -4,70 +4,61 @@ Naïve Text-to-SQL: prompt-and-pray approach.
 Deliberately simple. No validation, no safety checks, no error handling.
 The simplicity IS the point — this is what most demos show,
 and it's exactly what breaks in production.
+
+LLM dispatch and JSONL logging are delegated to llm_router_ledger.
 """
 
 import os
 
 from dotenv import load_dotenv
-from openai import OpenAI
+
+from llm_router_ledger import (
+    send_message,
+    UsageTracker,
+)
 
 from text_to_sql.app_logger import get_logger
 from text_to_sql.db import execute_query, get_schema_ddl
 from text_to_sql.prompts.prompts import get_prompt
-from text_to_sql.usage_tracker import log_llm_request, log_llm_response
 
 
 load_dotenv()
 
 logger = get_logger(__name__)
 
+DEFAULT_ENDPOINT = os.getenv("NAIVE_ENDPOINT", "openrouter-gpt4.1-nano")
 SYSTEM_PROMPT = get_prompt("naive")
 
 
 def ask(
         question: str,
         verbose: bool = False,
-        max_num_result_rows: int = 10) -> list[dict]:
+        max_num_result_rows: int = 10,
+        tracker: UsageTracker | None = None,
+        endpoint_name: str = DEFAULT_ENDPOINT) -> list[dict]:
     """
     Helper function used to take in as input a natural language question,
     use LLM to generate SQL, execute it, and then return results.
 
     That's it. No validation. No safety. No guardrails.
-    """
-    # Step 1: Load the entire schema as context
-    schema = get_schema_ddl()
 
-    # Step 2: Ask the LLM to generate SQL
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    When tracker is provided, paired llm_request / llm_response events
+    are written to its JSONL log.
+    """
+    schema = get_schema_ddl()
     user_content = f"Schema:\n{schema}\n\nQuestion: {question}"
 
-    request_id = log_llm_request(
-        model=model,
-        system_prompt=SYSTEM_PROMPT,
-        user_prompt=user_content,
-        question=question,
+    sql, _, _ = send_message(
+        endpoint_name=endpoint_name,
+        system=SYSTEM_PROMPT,
+        user=user_content,
+        tracker=tracker,
+        purpose="naive",
+        metadata={"question": question},
+        temperature=0.0,
     )
+    sql = sql.strip()
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0,
-    )
-    sql = response.choices[0].message.content.strip()
-
-    log_llm_response(
-        request_id=request_id,
-        model=model,
-        question=question,
-        usage=response.usage.model_dump() if response.usage else {},
-        generated_sql=sql,
-    )
-
-    # Clean markdown fencing if the LLM wraps it
     if sql.startswith("```"):
         sql = "\n".join(sql.split("\n")[1:-1])
 
@@ -75,7 +66,6 @@ def ask(
         logger.info(f"Question: {question}")
         logger.info(f"Generated SQL:\n{sql}")
 
-    # Step 3: Execute the SQL directly — no validation whatsoever
     results = execute_query(sql)
 
     if verbose:

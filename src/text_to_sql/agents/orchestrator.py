@@ -213,6 +213,7 @@ class OrchestratorAgent(BaseAgent):
                     await sec.audit_semantic_intent(
                         nl_query=refined_query,
                         generated_sql=generated_sql,
+                        tracker=sec._tracker,
                     )
                 )
                 sem_pids = []

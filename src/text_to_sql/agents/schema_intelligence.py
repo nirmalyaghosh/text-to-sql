@@ -35,10 +35,6 @@ from text_to_sql.agents.types import (
 from text_to_sql.app_logger import get_logger
 from text_to_sql.db import get_schema_ddl
 from text_to_sql.prompts.prompts import get_prompt
-from text_to_sql.usage_tracker import (
-    log_llm_request,
-    log_llm_response,
-)
 
 
 logger = get_logger(__name__)
@@ -580,12 +576,14 @@ class SchemaIntelligenceAgent(BaseAgent):
         )
 
         try:
-            request_id = log_llm_request(
-                model=self.model,
-                system_prompt=self.system_prompt,
-                user_prompt=prompt,
-                question=query,
-            )
+            request_id = ""
+            if self._tracker is not None:
+                request_id = self._tracker.log_request(
+                    model=self.model,
+                    system_prompt=self.system_prompt,
+                    user_prompt=prompt,
+                    metadata={"question": query},
+                )
             if self._zai_client:
                 output, meta = (
                     await self._zai_structured_call(
@@ -598,18 +596,18 @@ class SchemaIntelligenceAgent(BaseAgent):
                 self._last_provider_ids = (
                     [pid] if pid else []
                 )
-                log_llm_response(
-                    request_id=request_id,
-                    model=self.model,
-                    question=query,
-                    usage={
-                        "input_tokens": meta["input_tokens"],
-                        "output_tokens": meta["output_tokens"],
-                    },
-                    generated_sql="[entity_extraction]",
-                    trim_sql_preview=False,
-                    generation_id=pid,
-                )
+                if self._tracker is not None:
+                    self._tracker.log_response(
+                        request_id=request_id,
+                        model=self.model,
+                        response_text="[entity_extraction]",
+                        usage={
+                            "input_tokens": meta["input_tokens"],
+                            "output_tokens": meta["output_tokens"],
+                        },
+                        generation_id=pid,
+                        metadata={"question": query},
+                    )
                 return output
             result = await self._entity_agent.run(
                 prompt
@@ -617,19 +615,19 @@ class SchemaIntelligenceAgent(BaseAgent):
             self._last_provider_ids = self.extract_provider_ids(result=result)
             usage = result.usage()
             gen_id = self._last_provider_ids[0] if self._last_provider_ids else ""
-            log_llm_response(
-                request_id=request_id,
-                model=self.model,
-                question=query,
-                usage={
-                    "input_tokens": usage.input_tokens,
-                    "output_tokens": usage.output_tokens,
-                },
-                generated_sql="[entity_extraction]",
-                trim_sql_preview=False,
-                generation_id=gen_id,
-                usage_details=usage.details or None,
-            )
+            if self._tracker is not None:
+                self._tracker.log_response(
+                    request_id=request_id,
+                    model=self.model,
+                    response_text="[entity_extraction]",
+                    usage={
+                        "input_tokens": usage.input_tokens,
+                        "output_tokens": usage.output_tokens,
+                    },
+                    generation_id=gen_id,
+                    usage_details=usage.details or None,
+                    metadata={"question": query},
+                )
             return result.output
         except Exception as e:
             logger.warning(

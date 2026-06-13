@@ -20,16 +20,16 @@ from typing import (
     Optional,
 )
 
+from llm_router_ledger import (
+    load_config,
+    send_message,
+    UsageTracker,
+)
+
 from text_to_sql.agents.base import BaseAgent
 from text_to_sql.agents.types import QueryRequest
 from text_to_sql.app_logger import get_logger
-from text_to_sql.llm_config import (
-    get_client,
-    get_model_name,
-    load_config,
-)
 from text_to_sql.prompts.prompts import get_prompt
-from text_to_sql.usage_tracker import log_llm_response
 
 
 logger = get_logger(__name__)
@@ -111,6 +111,7 @@ class SecurityGovernanceAgent(BaseAgent):
         self,
         nl_query: str,
         generated_sql: str,
+        tracker: UsageTracker | None = None,
     ) -> Dict[str, Any]:
         """
         Semantic output audit: compare generated SQL
@@ -121,6 +122,10 @@ class SecurityGovernanceAgent(BaseAgent):
         Args:
             nl_query: The user's natural language query
             generated_sql: The SQL that was produced
+            tracker: Optional UsageTracker; when
+                provided the semantic-audit LLM call
+                is logged as paired llm_request /
+                llm_response events.
 
         Returns:
             {'safe': bool, 'reason': str}
@@ -137,52 +142,33 @@ class SecurityGovernanceAgent(BaseAgent):
             ep = eps[0]
             logger.info("Semantic audit: %s via %s", ep.model, ep.provider)
 
-            client = get_client(endpoint_name=ep.name, config=config)
-            model = get_model_name(endpoint_name=ep.name, config=config)
-            create_kwargs = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": get_prompt("semantic_audit")},
-                    {"role": "user", "content": (
-                        f"/no_think\nUSER_QUERY: {nl_query}\n\n"
-                        f"GENERATED_SQL: {generated_sql}"
-                    )},
-                ],
-                "temperature": 0.0,
-                "max_tokens": 200,
-            }
-            run_tag = os.environ.get("OPENROUTER_RUN_TAG", "")
-            if run_tag:
-                create_kwargs["user"] = run_tag
-            provider = os.environ.get("OPENROUTER_PROVIDER", "")
-            if provider:
-                create_kwargs["extra_body"] = {
-                    "provider": json.loads(provider),
-                }
-            response = client.chat.completions.create(**create_kwargs)
-
-            u = response.usage
-            gen_id = response.id if hasattr(response, "id") else ""
-            if u:
-                log_llm_response(
-                    request_id="semantic_audit",
-                    model=model,
-                    question=nl_query[:200],
-                    usage={
-                        "prompt_tokens": u.prompt_tokens,
-                        "completion_tokens": u.completion_tokens,
-                        "total_tokens": u.total_tokens,
-                    },
-                    generated_sql=generated_sql[:200],
-                    purpose="semantic_audit",
-                    generation_id=gen_id or "",
-                )
-
-            result = self._parse_audit_response(
-                response.choices[0].message.content.strip()
+            provider_raw = os.environ.get("OPENROUTER_PROVIDER", "")
+            text, _, gen_id = send_message(
+                endpoint_name=ep.name,
+                system=get_prompt("semantic_audit"),
+                user=(
+                    f"/no_think\nUSER_QUERY: {nl_query}\n\n"
+                    f"GENERATED_SQL: {generated_sql}"
+                ),
+                config=config,
+                tracker=tracker,
+                purpose="semantic_audit",
+                metadata={
+                    "question": nl_query[:200],
+                    "audited_sql": generated_sql[:200],
+                },
+                temperature=0.0,
+                max_tokens=200,
+                user_id=os.environ.get("OPENROUTER_RUN_TAG") or None,
+                extra_body=(
+                    {"provider": json.loads(provider_raw)}
+                    if provider_raw else None
+                ),
             )
-            if hasattr(response, "id") and response.id:
-                result["provider_id"] = response.id
+
+            result = self._parse_audit_response(text.strip())
+            if gen_id:
+                result["provider_id"] = gen_id
             return result
 
         except json.JSONDecodeError as e:

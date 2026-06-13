@@ -17,19 +17,20 @@ import argparse
 import os
 import re
 
+from pathlib import Path
+
 import tiktoken
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from llm_router_ledger import (
+    get_model_name,
+    send_message,
+    UsageTracker,
+)
 
 from text_to_sql.app_logger import get_logger, setup_logging
 from text_to_sql.db import get_schema_ddl
 from text_to_sql.prompts.prompts import get_prompt
-from text_to_sql.usage_tracker import (
-    generate_run_id,
-    log_llm_request,
-    log_llm_response,
-)
 
 
 logger = get_logger(__name__)
@@ -37,7 +38,11 @@ logger = get_logger(__name__)
 QUESTION = "Show all active products in the Electronics category"
 ANSWER_SQL = "SELECT * FROM products WHERE is_active = TRUE " +\
              "AND category = 'Electronics';"
-MODEL = "gpt-4o-mini"
+DEFAULT_ENDPOINT = os.getenv("NAIVE_ENDPOINT", "openrouter-gpt4.1-nano")
+TIKTOKEN_MODEL = "gpt-4o"  # same o200k_base tokeniser as gpt-4.1-nano
+LOG_DIR = os.getenv("LOG_FILES_DIR_PATH", "logs")
+LOG_FILE = os.getenv("USAGE_LOG_FILE_NAME", "token_usage.jsonl")
+PROJECT_ID = "text-to-sql-naive"
 SYSTEM_PROMPT = get_prompt("naive")
 
 
@@ -47,7 +52,7 @@ def analyze_token_waste_estimated():
     """
     logger.info("Mode: tiktoken estimate (no API calls)")
 
-    enc = tiktoken.encoding_for_model(MODEL)
+    enc = tiktoken.encoding_for_model(TIKTOKEN_MODEL)
 
     full_schema = get_schema_ddl(llm_context=False)
     filtered_schema = get_schema_ddl(llm_context=True)
@@ -64,6 +69,7 @@ def analyze_token_waste_estimated():
     answer_tokens = len(enc.encode(ANSWER_SQL))
 
     _print_results(
+        model_label=f"{TIKTOKEN_MODEL} (tokeniser only)",
         question_tokens=question_tokens,
         answer_tokens=answer_tokens,
         full_tokens=full_tokens,
@@ -79,17 +85,29 @@ def analyze_token_waste_live():
     logger.info("Mode: live API calls")
     logger.info("")
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
     full_schema = get_schema_ddl(llm_context=False)
     filtered_schema = get_schema_ddl(llm_context=True)
     products_table = _extract_products_table(full_schema)
 
-    full_usage = _call_llm(client=client, schema_text=full_schema)
-    filtered_usage = _call_llm(client=client, schema_text=filtered_schema)
-    ideal_usage = _call_llm(client=client, schema_text=products_table)
+    log_path = Path(LOG_DIR) / LOG_FILE
+    with UsageTracker(
+            log_path=log_path,
+            project_id=PROJECT_ID) as tracker:
+        full_usage = _call_llm(
+            schema_text=full_schema,
+            tracker=tracker,
+            variant="full")
+        filtered_usage = _call_llm(
+            schema_text=filtered_schema,
+            tracker=tracker,
+            variant="filtered")
+        ideal_usage = _call_llm(
+            schema_text=products_table,
+            tracker=tracker,
+            variant="ideal")
 
     _print_results(
+        model_label=get_model_name(DEFAULT_ENDPOINT),
         question_tokens=None,
         answer_tokens=full_usage["completion_tokens"],
         full_tokens=full_usage["prompt_tokens"],
@@ -98,35 +116,27 @@ def analyze_token_waste_live():
     )
 
 
-def _call_llm(client: OpenAI, schema_text: str) -> dict:
+def _call_llm(
+        schema_text: str,
+        tracker: UsageTracker,
+        variant: str) -> dict:
     """
     Send a query to the LLM and return the usage dict.
     """
     user_content = f"Schema:\n{schema_text}\n\nQuestion: {QUESTION}"
-    request_id = log_llm_request(
-        model=MODEL,
-        system_prompt=SYSTEM_PROMPT,
-        user_prompt=user_content,
-        question=QUESTION,
+    _, usage, _ = send_message(
+        endpoint_name=DEFAULT_ENDPOINT,
+        system=SYSTEM_PROMPT,
+        user=user_content,
+        tracker=tracker,
+        purpose="naive_token_waste",
+        metadata={
+            "question": QUESTION,
+            "schema_variant": variant,
+        },
+        temperature=0.0,
     )
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0,
-    )
-    resp_dict = response.usage.model_dump() if response.usage else {}
-    log_llm_response(
-        request_id=request_id,
-        model=MODEL,
-        question=QUESTION,
-        usage=resp_dict,
-        generated_sql=response.choices[0].message.content.strip(),
-        trim_sql_preview=True,
-    )
-    return resp_dict
+    return usage
 
 
 def _extract_products_table(full_schema: str) -> str:
@@ -143,6 +153,7 @@ def _extract_products_table(full_schema: str) -> str:
 
 def _print_results(
         *,
+        model_label: str,
         question_tokens: int | None,
         answer_tokens: int,
         full_tokens: int,
@@ -152,7 +163,7 @@ def _print_results(
     Print the token waste comparison table.
     """
     content = []
-    content.append(f"Model: {MODEL}")
+    content.append(f"Model: {model_label}")
     content.append(f"Question: {QUESTION}")
     content.append(f"Answer SQL: {ANSWER_SQL}")
     content.append("")
@@ -188,7 +199,6 @@ if __name__ == "__main__":
     setup_logging()
 
     if args.live:
-        generate_run_id()
         analyze_token_waste_live()
     else:
         analyze_token_waste_estimated()

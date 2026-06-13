@@ -22,19 +22,18 @@ Usage:
 import json
 import os
 import re
-import time
 
 from dataclasses import dataclass
 from typing import List
 
-from text_to_sql.app_logger import get_logger
-from text_to_sql.llm_config import (
-    get_client,
-    get_model_name,
+from llm_router_ledger import (
     load_config,
+    send_message,
+    UsageTracker,
 )
+
+from text_to_sql.app_logger import get_logger
 from text_to_sql.prompts.prompts import get_prompt
-from text_to_sql.usage_tracker import log_llm_response
 
 
 logger = get_logger(__name__)
@@ -255,14 +254,19 @@ def _tier1_scan(ddl: str) -> List[Finding]:
     return findings
 
 
-def _tier2_llm_scan(ddl: str) -> List[Finding]:
+def _tier2_llm_scan(
+    ddl: str,
+    tracker: UsageTracker | None = None,
+) -> List[Finding]:
     """
     Helper function used to run Tier 2 LLM
     inspection on the DDL. Only called when
     Tier 1 finds nothing.
 
     Uses the schema_inspector role endpoint
-    from llm_endpoints.yaml.
+    from llm_endpoints.yaml. When tracker is
+    provided, paired llm_request / llm_response
+    events are appended to its JSONL log.
     """
     try:
         config = load_config()
@@ -278,52 +282,18 @@ def _tier2_llm_scan(ddl: str) -> List[Finding]:
         logger.info(
             "Tier 2: %s via %s", ep.model, ep.provider)
 
-        client = get_client(
+        content, _, _ = send_message(
             endpoint_name=ep.name,
+            system=get_prompt("schema_inspector"),
+            user=ddl,
             config=config,
+            tracker=tracker,
+            purpose="schema_inspector",
+            metadata={"question": "schema_ddl_inspection"},
+            temperature=0.0,
+            max_tokens=500,
+            user_id=os.environ.get("OPENROUTER_RUN_TAG") or None,
         )
-        model = get_model_name(
-            endpoint_name=ep.name,
-            config=config,
-        )
-        prompt = get_prompt("schema_inspector")
-        create_kwargs: dict = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": prompt,
-                },
-                {
-                    "role": "user",
-                    "content": ddl,
-                },
-            ],
-            "temperature": 0.0,
-            "max_tokens": 500,
-        }
-        run_tag = os.environ.get("OPENROUTER_RUN_TAG", "")
-        if run_tag:
-            create_kwargs["user"] = run_tag
-        response = client.chat.completions.create(**create_kwargs)
-
-        u = response.usage
-        gen_id = getattr(response, "id", "")
-        content = response.choices[0].message.content or ""
-
-        if u:
-            log_llm_response(
-                request_id=f"si-{int(time.time())}",
-                model=model,
-                question="schema_ddl_inspection",
-                usage={
-                    "prompt_tokens": u.prompt_tokens,
-                    "completion_tokens": u.completion_tokens,
-                },
-                generated_sql=content,
-                purpose="schema_inspector",
-                generation_id=gen_id,
-            )
         return _parse_llm_response(content=content)
 
     except Exception as e:
@@ -337,6 +307,7 @@ def _tier2_llm_scan(ddl: str) -> List[Finding]:
 def inspect_schema(
     ddl: str,
     skip_tier2: bool = False,
+    tracker: UsageTracker | None = None,
 ) -> List[Finding]:
     """
     Run two-tier schema inspection on DDL.
@@ -350,6 +321,10 @@ def inspect_schema(
         ddl: Schema DDL string (CREATE TABLE
             blocks)
         skip_tier2: Skip LLM inspection
+        tracker: Optional UsageTracker; when
+            provided the Tier 2 LLM call is
+            logged as paired llm_request /
+            llm_response events.
 
     Returns:
         List of Finding objects
@@ -371,7 +346,7 @@ def inspect_schema(
         return []
 
     logger.info("Schema inspection: Tier 2 (LLM)")
-    findings = _tier2_llm_scan(ddl=ddl)
+    findings = _tier2_llm_scan(ddl=ddl, tracker=tracker)
     if findings:
         logger.info(
             "Schema inspection: Tier 2 found "

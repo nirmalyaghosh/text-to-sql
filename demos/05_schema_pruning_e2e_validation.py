@@ -36,17 +36,16 @@ from typing import (
 )
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from llm_router_ledger import (
+    get_model_name,
+    send_message,
+    UsageTracker,
+)
 
 from text_to_sql.app_logger import get_logger, setup_logging
 from text_to_sql.db import execute_query, get_schema_ddl
 from text_to_sql.prompts.prompts import get_prompt
 from text_to_sql.schema_pruner import SchemaPruner
-from text_to_sql.usage_tracker import (
-    generate_run_id,
-    log_llm_request,
-    log_llm_response,
-)
 
 
 load_dotenv()
@@ -57,6 +56,9 @@ EVALS_DIR = Path(__file__).parent.parent / "evals"
 LOGS_DIR = Path(__file__).parent.parent / "logs"
 SCHEMA_DIR = Path(__file__).parent.parent / "schema"
 
+DEFAULT_ENDPOINT = os.getenv("NAIVE_ENDPOINT", "openrouter-gpt4.1-nano")
+LOG_FILE = os.getenv("USAGE_LOG_FILE_NAME", "token_usage.jsonl")
+PROJECT_ID = "text-to-sql-naive"
 SYSTEM_PROMPT = get_prompt("naive")
 
 
@@ -79,8 +81,8 @@ def load_schema_ddl() -> str:
 def generate_sql(
     question: str,
     schema: str,
-    client: OpenAI,
-    model: str,
+    tracker: UsageTracker,
+    schema_variant: str,
 ) -> Tuple[str, Dict]:
     """
     Helper function used to generate SQL from a question
@@ -94,34 +96,19 @@ def generate_sql(
     """
     user_content = f"Schema:\n{schema}\n\nQuestion: {question}"
 
-    request_id = log_llm_request(
-        model=model,
-        system_prompt=SYSTEM_PROMPT,
-        user_prompt=user_content,
-        question=question,
+    sql, usage, _ = send_message(
+        endpoint_name=DEFAULT_ENDPOINT,
+        system=SYSTEM_PROMPT,
+        user=user_content,
+        tracker=tracker,
+        purpose="schema_pruning_e2e",
+        metadata={
+            "question": question,
+            "schema_variant": schema_variant,
+        },
+        temperature=0.0,
     )
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0,
-    )
-    sql = response.choices[0].message.content.strip()
-
-    usage = (
-        response.usage.model_dump() if response.usage else {}
-    )
-
-    log_llm_response(
-        request_id=request_id,
-        model=model,
-        question=question,
-        usage=usage,
-        generated_sql=sql,
-    )
+    sql = sql.strip()
 
     # Clean markdown fencing if the LLM wraps it
     if sql.startswith("```"):
@@ -222,9 +209,7 @@ def run_e2e_validation(
         logging.WARNING
     )
 
-    run_id = generate_run_id()
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    model = get_model_name(DEFAULT_ENDPOINT)
 
     # Load schema and build pruner
     raw_ddl = load_schema_ddl()
@@ -250,6 +235,13 @@ def run_e2e_validation(
                 f"No prunable query found with ID: {query_filter}"
             )
             return
+
+    log_path = Path(LOGS_DIR) / LOG_FILE
+    tracker = UsageTracker(
+        log_path=log_path,
+        project_id=PROJECT_ID,
+    )
+    run_id = tracker.run_id
 
     logger.info(
         f"E2E validation: {len(prunable)} queries, model={model}"
@@ -298,8 +290,8 @@ def run_e2e_validation(
             full_sql, full_usage = generate_sql(
                 question=query,
                 schema=full_schema,
-                client=client,
-                model=model,
+                tracker=tracker,
+                schema_variant="full",
             )
             full_latency = time.monotonic() - t0
 
@@ -307,8 +299,8 @@ def run_e2e_validation(
             pruned_sql, pruned_usage = generate_sql(
                 question=query,
                 schema=prune_result.pruned_schema,
-                client=client,
-                model=model,
+                tracker=tracker,
+                schema_variant="pruned",
             )
             pruned_latency = time.monotonic() - t0
         else:
@@ -316,8 +308,8 @@ def run_e2e_validation(
             pruned_sql, pruned_usage = generate_sql(
                 question=query,
                 schema=prune_result.pruned_schema,
-                client=client,
-                model=model,
+                tracker=tracker,
+                schema_variant="pruned",
             )
             pruned_latency = time.monotonic() - t0
 
@@ -325,8 +317,8 @@ def run_e2e_validation(
             full_sql, full_usage = generate_sql(
                 question=query,
                 schema=full_schema,
-                client=client,
-                model=model,
+                tracker=tracker,
+                schema_variant="full",
             )
             full_latency = time.monotonic() - t0
 
@@ -439,6 +431,7 @@ def run_e2e_validation(
             logger.info("")
 
     if not prunable:
+        tracker.close()
         return
 
     # Summary
@@ -564,6 +557,7 @@ def run_e2e_validation(
     logger.info(
         f"\n  Results appended to: {output_path}"
     )
+    tracker.close()
 
 
 if __name__ == "__main__":

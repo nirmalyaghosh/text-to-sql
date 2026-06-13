@@ -274,6 +274,7 @@ def test_tier2_called_when_tier1_clean(
         )
         mock_t2.assert_called_once_with(
             ddl=clean_products_ddl,
+            tracker=None,
         )
         assert len(findings) == 1
         assert findings[0].tier == 2

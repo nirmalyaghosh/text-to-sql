@@ -53,6 +53,7 @@ from collections import Counter
 import json
 import logging
 import math
+import os
 import re
 from pathlib import Path
 from typing import (
@@ -64,19 +65,16 @@ from typing import (
 )
 
 from dotenv import load_dotenv
+from llm_router_ledger import (
+    get_model_name,
+    load_config,
+    send_message,
+    UsageTracker,
+)
 
 from text_to_sql.app_logger import (
     get_logger,
     setup_logging,
-)
-from text_to_sql.usage_tracker import (
-    generate_run_id,
-    log_llm_response,
-)
-from text_to_sql.llm_config import (
-    get_client,
-    get_model_name,
-    load_config,
 )
 
 setup_logging()
@@ -643,8 +641,8 @@ def generate_candidate(
     category_name: str,
     category_guidance: str,
     existing_in_vector: List[Dict[str, Any]],
-    client: Any,
-    model: str,
+    endpoint_name: str,
+    tracker: UsageTracker | None = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Generate one adversarial query candidate
@@ -657,81 +655,46 @@ def generate_candidate(
     prompt = GENERATION_PROMPT.format(
         checks=SECURITY_CHECKS,
         vector=vector,
-        vector_guidance=VECTOR_GUIDANCE.get(
-            vector, ""
-        ),
+        vector_guidance=VECTOR_GUIDANCE.get(vector, ""),
         category_name=category_name,
         category_guidance=category_guidance,
-        existing=(
-            existing_text
-            if existing_text
-            else "(none yet)"
-        ),
+        existing=existing_text or "(none yet)",
     )
 
     try:
-        response = (
-            client.chat.completions.create(
-                model=model,
-                messages=[{
-                    "role": "user",
-                    "content": prompt,
-                }],
-                temperature=0.9,
-                max_tokens=800,
-                response_format={
-                    "type": "json_object",
-                },
-            )
+        content, _, _ = send_message(
+            endpoint_name=endpoint_name,
+            user=prompt,
+            tracker=tracker,
+            purpose="aq_generation",
+            metadata={
+                "vector": vector,
+                "category": category_name,
+            },
+            temperature=0.9,
+            max_tokens=800,
+            response_format={"type": "json_object"},
         )
-        content = (
-            response.choices[0].message.content
-        )
-        usage = response.usage
-        if usage:
-            log_llm_response(
-                request_id=f"{vector}/{category_name}",
-                model=model,
-                question=vector,
-                usage={
-                    "prompt_tokens": usage.prompt_tokens,
-                    "completion_tokens": usage.completion_tokens,
-                    "total_tokens": usage.total_tokens,
-                },
-                generated_sql=content[:200] if content else "",
-                purpose="aq_generation",
-            )
         if not content:
             logger.warning("Empty LLM response")
             return None
 
         candidate = json.loads(content.strip())
         candidate["vector"] = vector
-        candidate["mechanism_category"] = (
-            category_name
-        )
+        candidate["mechanism_category"] = category_name
 
-        # Normalize technique to snake_case
-        technique = candidate.get(
-            "attack_technique", ""
-        )
+        technique = candidate.get("attack_technique", "")
         candidate["attack_technique"] = (
-            technique.lower()
-            .replace(" ", "_")
-            .replace("-", "_")
+            technique.lower().replace(" ", "_").replace("-", "_")
         )
 
         return candidate
 
     except json.JSONDecodeError as exc:
-        logger.warning(
-            "Bad JSON from LLM: %s", exc,
-        )
+        logger.warning("Bad JSON from LLM: %s", exc)
         return None
     except Exception as exc:
-        logger.error(
-            "LLM call failed: %s", exc,
-        )
+        logger.error("LLM call failed: %s", exc)
         return None
 
 
@@ -778,7 +741,13 @@ def main() -> None:
         )
     )
 
-    run_id = generate_run_id()
+    log_dir = os.getenv("LOG_FILES_DIR_PATH", "logs")
+    log_file = os.getenv("USAGE_LOG_FILE_NAME", "token_usage.jsonl")
+    tracker = UsageTracker(
+        log_path=Path(log_dir) / log_file,
+        project_id="text-to-sql-adversarial-gen",
+    )
+    run_id = tracker.run_id
     mode = "DRY RUN" if args.dry_run else "LIVE"
     moe = args.margin_of_error
     per_v = _queries_per_vector(moe)
@@ -820,6 +789,7 @@ def main() -> None:
 
     if total_gap == 0:
         print("\nAll coverage targets met.")
+        tracker.close()
         return
 
     if args.dry_run:
@@ -827,17 +797,10 @@ def main() -> None:
             coverage=coverage,
             total_gap=total_gap,
         )
+        tracker.close()
         return
 
-    config = load_config()
-    client = get_client(
-        endpoint_name=args.endpoint,
-        config=config,
-    )
-    model = get_model_name(
-        endpoint_name=args.endpoint,
-        config=config,
-    )
+    model = get_model_name(endpoint_name=args.endpoint)
 
     new_count = 0
     retry_total = 0
@@ -854,6 +817,7 @@ def main() -> None:
 
     if max_new <= 0:
         print("\nTarget already met.")
+        tracker.close()
         return
 
     print(
@@ -904,14 +868,10 @@ def main() -> None:
                 candidate = generate_candidate(
                     vector=vector,
                     category_name=cat_name,
-                    category_guidance=(
-                        cat_guidance
-                    ),
-                    existing_in_vector=(
-                        vector_queries
-                    ),
-                    client=client,
-                    model=model,
+                    category_guidance=cat_guidance,
+                    existing_in_vector=vector_queries,
+                    endpoint_name=args.endpoint,
+                    tracker=tracker,
                 )
                 if candidate is None:
                     retry_total += 1
@@ -1050,6 +1010,7 @@ def main() -> None:
         ),
         title="Final Coverage",
     )
+    tracker.close()
 
 
 def parse_args() -> argparse.Namespace:
@@ -1094,11 +1055,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--endpoint",
         type=str,
-        default="openai-gpt4o-mini",
+        default="openrouter-gpt4.1-nano",
         help=(
             "Endpoint name from"
             " llm_endpoints.yaml"
-            " (default: openai-gpt4o-mini)"
+            " (default: openrouter-gpt4.1-nano)"
         ),
     )
     parser.add_argument(

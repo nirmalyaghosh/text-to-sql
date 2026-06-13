@@ -25,6 +25,7 @@ Usage:
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 from typing import (
     Any,
@@ -35,26 +36,21 @@ from typing import (
 )
 
 from dotenv import load_dotenv
+from llm_router_ledger import (
+    get_model_name,
+    send_message,
+    UsageTracker,
+)
 
 from text_to_sql.app_logger import (
     get_logger,
     setup_logging,
-)
-from text_to_sql.llm_config import (
-    get_client,
-    get_model_name,
-    load_config,
-)
-from text_to_sql.usage_tracker import (
-    generate_run_id,
-    log_llm_response,
 )
 
 from generate_adversarial_queries import (
     _build_record,
     _jaccard_similarity,
     _validate_candidate,
-    check_distinctness,
     load_queries,
     save_queries,
 )
@@ -399,100 +395,55 @@ def generate_candidate(
     category_name: str,
     category_guidance: str,
     existing_in_vector: List[Dict[str, Any]],
-    client: Any,
-    model: str,
+    endpoint_name: str,
+    tracker: UsageTracker | None = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Generate one national ID adversarial query
     via LLM.
     """
-    existing_text = _format_existing(
-        queries=existing_in_vector,
-    )
     prompt = GENERATION_PROMPT.format(
         vector=vector,
         category_name=category_name,
         category_guidance=category_guidance,
-        existing=existing_text,
+        existing=_format_existing(queries=existing_in_vector),
     )
 
     try:
-        response = (
-            client.chat.completions.create(
-                model=model,
-                messages=[{
-                    "role": "user",
-                    "content": prompt,
-                }],
-                temperature=0.9,
-                max_tokens=800,
-                response_format={
-                    "type": "json_object",
-                },
-            )
+        content, _, _ = send_message(
+            endpoint_name=endpoint_name,
+            user=prompt,
+            tracker=tracker,
+            purpose="natid_aq_generation",
+            metadata={
+                "vector": vector,
+                "category": category_name,
+            },
+            temperature=0.9,
+            max_tokens=800,
+            response_format={"type": "json_object"},
         )
-        content = (
-            response.choices[0].message.content
-        )
-        usage = response.usage
-        if usage:
-            log_llm_response(
-                request_id=(
-                    f"natid/{vector}/"
-                    f"{category_name}"
-                ),
-                model=model,
-                question=vector,
-                usage={
-                    "prompt_tokens": (
-                        usage.prompt_tokens
-                    ),
-                    "completion_tokens": (
-                        usage.completion_tokens
-                    ),
-                    "total_tokens": (
-                        usage.total_tokens
-                    ),
-                },
-                generated_sql=(
-                    content[:200] if content
-                    else ""
-                ),
-                purpose="natid_aq_generation",
-            )
         if not content:
             logger.warning("Empty LLM response")
             return None
 
         candidate = json.loads(content.strip())
         candidate["vector"] = vector
-        candidate["mechanism_category"] = (
-            category_name
-        )
-        candidate["extended_pii_sensitive"] = (
-            True
-        )
+        candidate["mechanism_category"] = category_name
+        candidate["extended_pii_sensitive"] = True
 
-        technique = candidate.get(
-            "attack_technique", ""
-        )
+        technique = candidate.get("attack_technique", "")
         candidate["attack_technique"] = (
-            technique.lower()
-            .replace(" ", "_")
-            .replace("-", "_")
+            technique.lower().replace(" ", "_").replace("-", "_")
         )
 
         return candidate
 
     except json.JSONDecodeError as exc:
-        logger.warning(
-            "Bad JSON from LLM: %s", exc,
-        )
+        logger.warning("Bad JSON from LLM: %s", exc)
         return None
     except Exception as exc:
-        logger.error(
-            "LLM call failed: %s", exc,
-        )
+        logger.error("LLM call failed: %s", exc)
         return None
 
 
@@ -522,8 +473,8 @@ def main() -> None:
     parser.add_argument(
         "--endpoint",
         type=str,
-        default="deepseek-chat",
-        help="LLM endpoint (default: deepseek-chat)",
+        default="deepseek-v3.2",
+        help="LLM endpoint (default: deepseek-v3.2)",
     )
     parser.add_argument(
         "--env-file",
@@ -602,17 +553,15 @@ def main() -> None:
         print("\n[DRY RUN] No API calls made.")
         return
 
-    config = load_config()
-    client = get_client(
-        endpoint_name=args.endpoint,
-        config=config,
+    model = get_model_name(endpoint_name=args.endpoint)
+    log_path = Path(os.getenv("LOG_FILES_DIR_PATH", "logs")) / os.getenv(
+        "USAGE_LOG_FILE_NAME", "token_usage.jsonl",
     )
-    model = get_model_name(
-        endpoint_name=args.endpoint,
-        config=config,
+    tracker = UsageTracker(
+        log_path=log_path,
+        project_id="text-to-sql-adversarial-gen",
     )
 
-    run_id = generate_run_id()
     next_id = len(queries) + 1
     new_count = 0
     retry_total = 0
@@ -647,14 +596,10 @@ def main() -> None:
                 candidate = generate_candidate(
                     vector=vector,
                     category_name=cat_name,
-                    category_guidance=(
-                        cat_guidance
-                    ),
-                    existing_in_vector=(
-                        natid_queries
-                    ),
-                    client=client,
-                    model=model,
+                    category_guidance=cat_guidance,
+                    existing_in_vector=natid_queries,
+                    endpoint_name=args.endpoint,
+                    tracker=tracker,
                 )
                 if candidate is None:
                     retry_total += 1
@@ -810,6 +755,7 @@ def main() -> None:
         by_vector.items()
     ):
         print(f"    {vector}: {count}")
+    tracker.close()
 
 
 if __name__ == "__main__":

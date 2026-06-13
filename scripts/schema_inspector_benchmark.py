@@ -25,23 +25,23 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
+from llm_router_ledger import (
+    get_model_name,
+    load_config,
+    send_message,
+    UsageTracker,
+)
 
 from text_to_sql.app_logger import (
     get_logger,
     setup_logging,
 )
 from text_to_sql.db import get_schema_ddl
-from text_to_sql.llm_config import (
-    get_client,
-    get_model_name,
-    load_config,
-)
 from text_to_sql.prompts.prompts import get_prompt
 from text_to_sql.schema_inspector import (
     Finding,
     _tier1_scan,
 )
-from text_to_sql.usage_tracker import log_llm_response
 
 
 logger = get_logger(__name__)
@@ -258,72 +258,32 @@ def _run_tier2_for_model(
     endpoint_name: str,
     ddl: str,
     config: object,
+    tracker: UsageTracker | None = None,
 ) -> tuple[list[Finding], float, dict, str]:
     """
     Helper function used to run Tier 2 LLM
-    inspection for a single model.
+    inspection for a single model. When tracker
+    is provided the call is logged as paired
+    llm_request / llm_response events.
 
     Returns:
         (findings, elapsed_s, usage_dict,
         raw_response)
     """
-    client = get_client(
-        endpoint_name=endpoint_name,
-        config=config,
-    )
-    model = get_model_name(
-        endpoint_name=endpoint_name,
-        config=config,
-    )
-    prompt = get_prompt("schema_inspector")
-
-    create_kwargs: dict = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": prompt,
-            },
-            {
-                "role": "user",
-                "content": ddl,
-            },
-        ],
-        "temperature": 0.0,
-        "max_tokens": 500,
-    }
-    run_tag = os.environ.get("OPENROUTER_RUN_TAG", "")
-    if run_tag:
-        create_kwargs["user"] = run_tag
-
-    # Capture before API call so epoch aligns
-    # with OpenRouter generation_id
-    # (gen-{epoch}-{alphanum})
-    req_id = f"si-bench-{int(time.time())}"
-
     start = time.time()
-    response = client.chat.completions.create(**create_kwargs)
+    content, usage, _ = send_message(
+        endpoint_name=endpoint_name,
+        system=get_prompt("schema_inspector"),
+        user=ddl,
+        config=config,
+        tracker=tracker,
+        purpose="schema_inspector_bench",
+        metadata={"question": "benchmark_ddl_inspection"},
+        temperature=0.0,
+        max_tokens=500,
+        user_id=os.environ.get("OPENROUTER_RUN_TAG") or None,
+    )
     elapsed = time.time() - start
-
-    u = response.usage
-    usage = {}
-    gen_id = getattr(response, "id", "")
-    content = response.choices[0].message.content or ""
-
-    if u:
-        usage = {
-            "prompt_tokens": u.prompt_tokens,
-            "completion_tokens": u.completion_tokens,
-        }
-        log_llm_response(
-            request_id=req_id,
-            model=model,
-            question="benchmark_ddl_inspection",
-            usage=usage,
-            generated_sql=content,
-            purpose="schema_inspector_bench",
-            generation_id=gen_id,
-        )
 
     logger.info("[%s] Response: %s", endpoint_name, content[:120])
     findings = _parse_response(content=content, endpoint_name=endpoint_name)
@@ -409,6 +369,11 @@ def main() -> None:
     if not os.environ.get("OPENROUTER_RUN_TAG"):
         os.environ["OPENROUTER_RUN_TAG"] = "txt2sql-si-bench"
 
+    log_path = Path(os.getenv("LOG_FILES_DIR_PATH", "logs")) / os.getenv(
+        "USAGE_LOG_FILE_NAME", "token_usage.jsonl",
+    )
+    tracker = UsageTracker(log_path=log_path, project_id="text-to-sql-naive")
+
     clean_ddl = _load_clean_ddl()
     adversarial_ddl = _load_adversarial_ddl()
 
@@ -442,6 +407,7 @@ def main() -> None:
                     endpoint_name=ep_name,
                     ddl=clean_ddl,
                     config=config,
+                    tracker=tracker,
                 )
                 clean_elapsed = c_elapsed
                 _, clean_fp = _score_findings(
@@ -471,6 +437,7 @@ def main() -> None:
                 endpoint_name=ep_name,
                 ddl=adversarial_ddl,
                 config=config,
+                tracker=tracker,
             )
             adv_tp, adv_fp = _score_findings(
                 findings=a_findings,
@@ -546,6 +513,7 @@ def main() -> None:
         encoding="utf-8",
     )
     logger.info("  Results: %s", out_path)
+    tracker.close()
 
 
 if __name__ == "__main__":

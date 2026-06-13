@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+from llm_router_ledger import UsageTracker
 
 from text_to_sql.agents import (
     OrchestratorAgent,
@@ -44,7 +45,6 @@ from text_to_sql.app_logger import (
 )
 from text_to_sql.db import get_schema_ddl
 from text_to_sql.schema_inspector import inspect_schema
-from text_to_sql.usage_tracker import generate_run_id
 
 
 logger = get_logger(__name__)
@@ -71,10 +71,14 @@ def _append_result(
 def _build_pipeline(
     extended_pii: bool = False,
     model: str | None = None,
+    tracker: UsageTracker | None = None,
 ) -> OrchestratorAgent:
     """
     Helper function used to initialize and wire
     the 5-agent pipeline with a fresh state.
+    When tracker is provided, it is wired into
+    every agent so their LLM calls land in the
+    same JSONL log.
     """
     orchestrator = OrchestratorAgent(model=model)
     refinement = QueryRefinementAgent(model=model)
@@ -85,6 +89,12 @@ def _build_pipeline(
         model=model,
     )
     sql_gen = SQLGenerationAgent(model=model)
+
+    for agent in (
+        orchestrator, refinement, security,
+        schema_intel, sql_gen,
+    ):
+        agent._tracker = tracker
 
     orchestrator.inject_agent(
         agent_name="refinement",
@@ -510,6 +520,14 @@ async def run_adversarial_eval(
             )
         return path
 
+    log_path = Path(os.getenv("LOG_FILES_DIR_PATH", "logs")) / os.getenv(
+        "USAGE_LOG_FILE_NAME", "token_usage.jsonl",
+    )
+    tracker = UsageTracker(
+        log_path=log_path,
+        project_id="text-to-sql-adversarial",
+    )
+
     if not no_resume:
         rpath, rid, cids = _find_latest_partial(
             expected_count=len(queries),
@@ -525,10 +543,10 @@ async def run_adversarial_eval(
                 f"({len(completed_ids)} done)"
             )
         else:
-            run_id = generate_run_id()
+            run_id = tracker.run_id
             results_path = _fresh_path()
     else:
-        run_id = generate_run_id()
+        run_id = tracker.run_id
         results_path = _fresh_path()
 
     os.environ["OPENROUTER_RUN_TAG"] = f"txt2sql-adv-{run_id}"
@@ -562,7 +580,7 @@ async def run_adversarial_eval(
     # Two-tier schema inspection at startup
     ddl = get_schema_ddl(llm_context=True)
     schema_findings = inspect_schema(
-        ddl=ddl, skip_tier2=False,
+        ddl=ddl, skip_tier2=False, tracker=tracker,
     )
     if schema_findings:
         logger.info(
@@ -617,6 +635,7 @@ async def run_adversarial_eval(
             orchestrator = _build_pipeline(
                 extended_pii=extended_pii,
                 model=model,
+                tracker=tracker,
             )
             result = await asyncio.wait_for(
                 _run_query(
@@ -667,6 +686,7 @@ async def run_adversarial_eval(
     )
     logger.info(f"  Results saved to {results_path}")
     logger.info("")
+    tracker.close()
 
 
 async def run_golden_fp_check(
@@ -686,7 +706,14 @@ async def run_golden_fp_check(
     logger.info(f"  extended_pii: {pii_label}")
     _log_divider()
 
-    run_id = generate_run_id()
+    log_path = Path(os.getenv("LOG_FILES_DIR_PATH", "logs")) / os.getenv(
+        "USAGE_LOG_FILE_NAME", "token_usage.jsonl",
+    )
+    tracker = UsageTracker(
+        log_path=log_path,
+        project_id="text-to-sql-adversarial",
+    )
+    run_id = tracker.run_id
     path = EVALS_DIR / "golden_queries.json"
     with open(path, "r", encoding="utf-8") as f:
         golden = json.load(f)
@@ -707,6 +734,7 @@ async def run_golden_fp_check(
             orchestrator = _build_pipeline(
                 extended_pii=extended_pii,
                 model=model,
+                tracker=tracker,
             )
             result = await _run_query(
                 orchestrator=orchestrator,

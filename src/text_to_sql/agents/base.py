@@ -21,6 +21,10 @@ from typing import (
 
 import tiktoken
 
+from llm_router_ledger import (
+    get_context_window,
+    UsageTracker,
+)
 from openai import AsyncOpenAI
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.models.openai import OpenAIModel
@@ -32,7 +36,6 @@ from text_to_sql.agents.types import (
     QueryRequest,
 )
 from text_to_sql.app_logger import get_logger
-from text_to_sql.llm_config import get_context_window
 
 
 logger = get_logger(__name__)
@@ -117,6 +120,7 @@ class BaseAgent(ABC):
                 max_retries=5,
                 timeout=60,
             )
+        self._tracker: UsageTracker | None = None
         logger.info(f"Initialized {agent_name}")
 
     async def execute(

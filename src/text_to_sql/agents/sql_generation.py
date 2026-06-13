@@ -28,10 +28,6 @@ from text_to_sql.agents.types import (
 )
 from text_to_sql.app_logger import get_logger
 from text_to_sql.prompts.prompts import get_prompt
-from text_to_sql.usage_tracker import (
-    log_llm_request,
-    log_llm_response,
-)
 
 
 logger = get_logger(__name__)
@@ -126,14 +122,14 @@ class SQLGenerationAgent(BaseAgent):
             f"5. Any missing WHERE clauses?"
         )
         try:
-            request_id = log_llm_request(
-                model=self.model,
-                system_prompt=(
-                    self._critique_prompt
-                ),
-                user_prompt=prompt,
-                question=query,
-            )
+            request_id = ""
+            if self._tracker is not None:
+                request_id = self._tracker.log_request(
+                    model=self.model,
+                    system_prompt=self._critique_prompt,
+                    user_prompt=prompt,
+                    metadata={"question": query},
+                )
             if self._zai_client:
                 output, meta = (
                     await self._zai_structured_call(
@@ -145,18 +141,18 @@ class SQLGenerationAgent(BaseAgent):
                 pid = meta["provider_id"]
                 if pid:
                     self._provider_ids.append(pid)
-                log_llm_response(
-                    request_id=request_id,
-                    model=self.model,
-                    question=query,
-                    usage={
-                        "input_tokens": meta["input_tokens"],
-                        "output_tokens": meta["output_tokens"],
-                    },
-                    generated_sql=f"[critique] valid={output.is_valid}",
-                    trim_sql_preview=False,
-                    generation_id=pid,
-                )
+                if self._tracker is not None:
+                    self._tracker.log_response(
+                        request_id=request_id,
+                        model=self.model,
+                        response_text=f"[critique] valid={output.is_valid}",
+                        usage={
+                            "input_tokens": meta["input_tokens"],
+                            "output_tokens": meta["output_tokens"],
+                        },
+                        generation_id=pid,
+                        metadata={"question": query},
+                    )
                 return output
             result = await self._critique_agent.run(
                 prompt
@@ -164,19 +160,19 @@ class SQLGenerationAgent(BaseAgent):
             pids = self.extract_provider_ids(result=result)
             self._provider_ids.extend(pids)
             usage = result.usage()
-            log_llm_response(
-                request_id=request_id,
-                model=self.model,
-                question=query,
-                usage={
-                    "input_tokens": usage.input_tokens,
-                    "output_tokens": usage.output_tokens,
-                },
-                generated_sql=f"[critique] valid={result.output.is_valid}",
-                trim_sql_preview=False,
-                generation_id=pids[0] if pids else "",
-                usage_details=usage.details or None,
-            )
+            if self._tracker is not None:
+                self._tracker.log_response(
+                    request_id=request_id,
+                    model=self.model,
+                    response_text=f"[critique] valid={result.output.is_valid}",
+                    usage={
+                        "input_tokens": usage.input_tokens,
+                        "output_tokens": usage.output_tokens,
+                    },
+                    generation_id=pids[0] if pids else "",
+                    usage_details=usage.details or None,
+                    metadata={"question": query},
+                )
             return result.output
         except Exception as e:
             logger.warning(
@@ -526,12 +522,14 @@ class SQLGenerationAgent(BaseAgent):
             return None
 
         try:
-            request_id = log_llm_request(
-                model=self.model,
-                system_prompt=self.system_prompt,
-                user_prompt=prompt,
-                question=query,
-            )
+            request_id = ""
+            if self._tracker is not None:
+                request_id = self._tracker.log_request(
+                    model=self.model,
+                    system_prompt=self.system_prompt,
+                    user_prompt=prompt,
+                    metadata={"question": query},
+                )
             if self._zai_client:
                 output, meta = (
                     await self._zai_structured_call(
@@ -543,17 +541,18 @@ class SQLGenerationAgent(BaseAgent):
                 pid = meta["provider_id"]
                 if pid:
                     self._provider_ids.append(pid)
-                log_llm_response(
-                    request_id=request_id,
-                    model=self.model,
-                    question=query,
-                    usage={
-                        "input_tokens": meta["input_tokens"],
-                        "output_tokens": meta["output_tokens"],
-                    },
-                    generated_sql=output.sql,
-                    generation_id=pid,
-                )
+                if self._tracker is not None:
+                    self._tracker.log_response(
+                        request_id=request_id,
+                        model=self.model,
+                        response_text=output.sql,
+                        usage={
+                            "input_tokens": meta["input_tokens"],
+                            "output_tokens": meta["output_tokens"],
+                        },
+                        generation_id=pid,
+                        metadata={"question": query},
+                    )
                 return output
             result = await self._gen_agent.run(
                 prompt
@@ -561,18 +560,19 @@ class SQLGenerationAgent(BaseAgent):
             pids = self.extract_provider_ids(result=result)
             self._provider_ids.extend(pids)
             usage = result.usage()
-            log_llm_response(
-                request_id=request_id,
-                model=self.model,
-                question=query,
-                usage={
-                    "input_tokens": usage.input_tokens,
-                    "output_tokens": usage.output_tokens,
-                },
-                generated_sql=result.output.sql,
-                generation_id=pids[0] if pids else "",
-                usage_details=usage.details or None,
-            )
+            if self._tracker is not None:
+                self._tracker.log_response(
+                    request_id=request_id,
+                    model=self.model,
+                    response_text=result.output.sql,
+                    usage={
+                        "input_tokens": usage.input_tokens,
+                        "output_tokens": usage.output_tokens,
+                    },
+                    generation_id=pids[0] if pids else "",
+                    usage_details=usage.details or None,
+                    metadata={"question": query},
+                )
             return result.output
         except Exception as e:
             logger.error(

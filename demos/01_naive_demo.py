@@ -20,40 +20,48 @@ from pathlib import Path
 import tiktoken
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from llm_router_ledger import (
+    send_message,
+    UsageTracker,
+)
 
 from text_to_sql.app_logger import get_logger, setup_logging
 from text_to_sql.db import execute_query, get_schema_ddl
-from text_to_sql.naive.query import ask
+from text_to_sql.naive.query import (
+    ask,
+    DEFAULT_ENDPOINT,
+)
 from text_to_sql.prompts.prompts import get_prompt
-from text_to_sql.usage_tracker import generate_run_id
 
 
 DIVIDER = "=" * 70
 SCENARIOS_PATH = Path(__file__).parent / "scenarios.json"
+LOG_DIR = os.getenv("LOG_FILES_DIR_PATH", "logs")
+LOG_FILE = os.getenv("USAGE_LOG_FILE_NAME", "token_usage.jsonl")
+PROJECT_ID = "text-to-sql-naive"
 
 logger = get_logger(__name__)
 
 
-def demo_generate_only(label: str, question: str):
+def demo_generate_only(
+        label: str,
+        question: str,
+        tracker: UsageTracker):
     """
     Generate SQL without executing -- for destructive query demos.
     """
     logger.info(f"\n--- {label} ---")
     schema = get_schema_ddl()
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system",
-             "content": get_prompt("naive")},
-            {"role": "user",
-             "content": f"Schema:\n{schema}\n\nQuestion: {question}"},
-        ],
-        temperature=0,
+    sql, _, _ = send_message(
+        endpoint_name=DEFAULT_ENDPOINT,
+        system=get_prompt("naive"),
+        user=f"Schema:\n{schema}\n\nQuestion: {question}",
+        tracker=tracker,
+        purpose="naive_generate_only",
+        metadata={"question": question, "mode": "generate_only"},
+        temperature=0.0,
     )
-    sql = response.choices[0].message.content.strip()
+    sql = sql.strip()
     if sql.startswith("```"):
         sql = "\n".join(sql.split("\n")[1:-1])
     logger.info(f"  Question: {question}")
@@ -61,13 +69,17 @@ def demo_generate_only(label: str, question: str):
     logger.info("  ** This would execute if we called execute_query() **")
 
 
-def demo_query(label: str, question: str):
+def demo_query(label: str, question: str, tracker: UsageTracker):
     """
     Run a query and display results.
     """
     logger.info(label)
     try:
-        results = ask(question=question, verbose=True)
+        results = ask(
+            question=question,
+            verbose=True,
+            tracker=tracker,
+        )
         return results
     except Exception as e:
         logger.error(f"  ERROR: {type(e).__name__}: {e}")
@@ -151,18 +163,20 @@ def run_context_window_cost(model: str = "gpt-4o-mini"):
                 "Enterprise systems have 200-500+ tables.")
 
 
-def run_scenario(scenario: dict):
+def run_scenario(scenario: dict, tracker: UsageTracker):
     """
     Run a single scenario based on its mode.
     """
     if scenario["mode"] == "execute":
         demo_query(
             label=scenario["label"],
-            question=scenario["question"])
+            question=scenario["question"],
+            tracker=tracker)
     elif scenario["mode"] == "generate_only":
         demo_generate_only(
             label=scenario["label"],
-            question=scenario["question"])
+            question=scenario["question"],
+            tracker=tracker)
 
     if scenario.get("remarks"):
         logger.info(f"  {scenario['remarks']}")
@@ -224,18 +238,21 @@ if __name__ == "__main__":
         list_scenarios(sections)
         raise SystemExit(0)
 
-    generate_run_id()
     running_all = not args.scenarios and not args.section_id
     filtered = filter_scenarios(sections, args.scenarios, args.section_id)
 
     run_setup()
 
-    for sec in filtered:
-        section(sec["title"])
-        if sec.get("preamble"):
-            logger.info(f"{sec['preamble']}")
-        for scenario in sec["scenarios"]:
-            run_scenario(scenario)
+    log_path = Path(LOG_DIR) / LOG_FILE
+    with UsageTracker(
+            log_path=log_path,
+            project_id=PROJECT_ID) as tracker:
+        for sec in filtered:
+            section(sec["title"])
+            if sec.get("preamble"):
+                logger.info(f"{sec['preamble']}")
+            for scenario in sec["scenarios"]:
+                run_scenario(scenario=scenario, tracker=tracker)
 
     if running_all:
         run_context_window_cost()
